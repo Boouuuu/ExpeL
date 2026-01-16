@@ -2,7 +2,7 @@ import re
 from typing import List, Dict, Any, Tuple
 from envs.base import BaseEnv
 
-import alfworld.agents.environment
+# import alfworld.agents.environment
 from utils import get_env_name_from_gamefile
 
 class AlfworldEnv(BaseEnv):
