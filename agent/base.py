@@ -39,7 +39,8 @@ class BaseAgent(ABC):
         pass
 
     def log_history(self, include_task: bool = True, include_all: bool = False) -> str:
-        all_history = '\n'.join([prompt.content for prompt in self.prompt_history])
+        # 兼容dict和ChatMessage格式
+        all_history = '\n'.join([prompt['content'] if isinstance(prompt, dict) else prompt.content for prompt in self.prompt_history])
         if include_all:
             return all_history
 
@@ -47,7 +48,13 @@ class BaseAgent(ABC):
         reflection_pattern = r'{}'.format(self.format_reflections(self.reflections, include_prefix=False))
         match = re.search(re.escape(reflection_pattern), all_history)
         if not match or match.group() == '' or not include_task:
-            task_text_list = human_task_message_prompt.format_messages(task=self.remove_task_suffix(self.task))[0].content.split('\n')
+            # 使用dict格式
+            if hasattr(human_task_message_prompt, 'format_messages'):
+                # 兼容langchain格式
+                task_text_list = human_task_message_prompt.format_messages(task=self.remove_task_suffix(self.task))[0].content.split('\n')
+            else:
+                # dict格式
+                task_text_list = human_task_message_prompt['content'].format(task=self.remove_task_suffix(self.task)).split('\n')
             task_text = '\n'.join(task_text_list)
             pattern = r'{}'.format(re.escape(task_text.strip()) + '.*')
             match = re.search(pattern, all_history)

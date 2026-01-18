@@ -115,8 +115,8 @@ class ReactAgent(BaseAgent):
             self.prompt_history.append(observation_history)
         elif operation == 'replace':
             for message in self.prompt_history:
-                if self._last_observation_history.content in message.content:
-                    message.content = message.content.replace(self._last_observation_history.content, observation_history.content)
+                if self._last_observation_history['content'] in message['content']:
+                    message['content'] = message['content'].replace(self._last_observation_history['content'], observation_history['content'])
                     break
             self._last_observation_history = deepcopy(observation_history)        
         self.print_message(observation_history)
@@ -152,25 +152,57 @@ class ReactAgent(BaseAgent):
     def _build_fewshot_prompt(
         self,
         fewshots: List[str],
-        prompt_history: List[ChatMessage],
-        instruction_prompt: PromptTemplate,
+        # prompt_history: List[ChatMessage],
+        prompt_history: List[dict],
+        # instruction_prompt: PromptTemplate,
+        instruction_prompt: str,
         instruction_prompt_kwargs: Dict[str, Any],
         prompt_type: str,
     ) -> str:
+        # if human_instruction_fewshot_message_prompt is not None and instruction_prompt is not None:
+        #     prompt_history.append(
+        #         human_instruction_fewshot_message_prompt('message_style_kwargs').format_messages(
+        #             instruction=instruction_prompt.format_messages(
+        #                 **instruction_prompt_kwargs)[0].content,
+        #             fewshots='\n\n'.join(fewshots)
+        #         )[0]
+        #     )
         if human_instruction_fewshot_message_prompt is not None and instruction_prompt is not None:
-            prompt_history.append(
-                human_instruction_fewshot_message_prompt('message_style_kwargs').format_messages(
-                    instruction=instruction_prompt.format_messages(
-                        **instruction_prompt_kwargs)[0].content,
-                    fewshots='\n\n'.join(fewshots)
-                )[0]
+            # 步骤1：替代原instruction_prompt.format_messages() - 原生字符串格式化（填充指令模板）
+            # 用str.format(**kwargs)解包字典，填充指令模板占位符，得到纯字符串指令内容
+            complete_instruction = instruction_prompt['content'].format(**instruction_prompt_kwargs)
+            
+            # 步骤2：替代原'\n\n'.join(fewshots) - 拼接示例列表为完整字符串
+            complete_fewshots = '\n\n'.join(fewshots)
+            
+            # 步骤3：调用修正后的函数，获取基础消息字典（纯dict）
+            base_message_dict = human_instruction_fewshot_message_prompt('message_style_kwargs')
+            
+            # 步骤4：替代原format_messages() - 填充消息模板的占位符（更新字典的content字段）
+            # 用str.format()填充基础字典中的模板字符串，生成最终完整内容
+            final_message_content = base_message_dict["content"].format(
+                instruction=complete_instruction,
+                fewshots=complete_fewshots
             )
+            
+            # 步骤5：构建最终消息字典（更新content为填充后的完整内容）
+            final_message_dict = {
+                "role": base_message_dict["role"],
+                "content": final_message_content
+            }
+            
+            # 步骤6：添加到历史列表（与原逻辑一致）
+            prompt_history.append(final_message_dict)
 
     def _build_agent_prompt(self) -> None:
-        system_prompt = self.system_prompt.format_messages(
+        # system_prompt = self.system_prompt.format_messages(
+        #     instruction=self.system_instruction, ai_name=self.name
+        # )
+        self.system_prompt["content"] = self.system_prompt["content"].format(
             instruction=self.system_instruction, ai_name=self.name
         )
-        self.prompt_history.extend(system_prompt)
+        system_prompt = self.system_prompt
+        self.prompt_history.append(system_prompt)
         self._build_fewshot_prompt(
             fewshots=self.fewshots, prompt_history=self.prompt_history,
             instruction_prompt=self.human_instruction,
@@ -181,7 +213,13 @@ class ReactAgent(BaseAgent):
         self.log_idx = len(self.prompt_history)
         self.insert_before_task_prompt()
 
-        self.prompt_history.append(human_task_message_prompt.format_messages(task=self.remove_task_suffix(self.task))[0])
+        # 使用dict格式代替ChatMessage
+        from prompts.templates.human import human_task_message_prompt
+        task_content = self.remove_task_suffix(self.task)
+        self.prompt_history.append({
+            'role': human_task_message_prompt['role'],
+            'content': human_task_message_prompt['content'].format(task=task_content)
+        })
         self.insert_after_task_prompt()
         self.prompt_history = self.collapse_prompts(self.prompt_history)
         self.pretask_idx = len(self.prompt_history)
@@ -225,26 +263,32 @@ class ReactAgent(BaseAgent):
     def get_stats(self) -> Tuple[int, int, int]:
         return self.success, self.fail, self.halted
 
-    def collapse_prompts(self, prompt_history: List[ChatMessage]) -> List[ChatMessage]:
+    def collapse_prompts(self, prompt_history: List[dict]) -> List[dict]:
         """Courtesy of GPT4"""
         if not prompt_history:
             return []
 
         new_prompt_history = []
-        scratch_pad = prompt_history[0].content
-        last_message_type = type(prompt_history[0])
+        scratch_pad = prompt_history[0]['content']
+        last_message_role = prompt_history[0]['role']
 
         for message in prompt_history[1:]:
-            current_message_type = type(message)
-            if current_message_type == last_message_type:
-                scratch_pad += '\n' + message.content
+            current_message_role = message['role']
+            if current_message_role == last_message_role:
+                scratch_pad += '\n' + message['content']
             else:
-                new_prompt_history.append(last_message_type(content=scratch_pad))
-                scratch_pad = message.content
-                last_message_type = current_message_type
+                new_prompt_history.append({
+                    'role': last_message_role,
+                    'content': scratch_pad
+                })
+                scratch_pad = message['content']
+                last_message_role = current_message_role
 
         # Handle the last accumulated message
-        new_prompt_history.append(last_message_type(content=scratch_pad))
+        new_prompt_history.append({
+            'role': last_message_role,
+            'content': scratch_pad
+        })
 
         return new_prompt_history
 

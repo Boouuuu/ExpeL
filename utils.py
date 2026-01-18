@@ -114,24 +114,33 @@ def token_counter(text: str, llm: str = 'gpt-3.5-turbo', tokenizer: Callable = N
 
     raise NotImplementedError
 
-def print_message(message: ChatMessage, token_counter: Callable = None, testing: bool = True, extra_text: str = '') -> None:
+def print_message(message: Union[dict, ChatMessage], token_counter: Callable = None, testing: bool = True, extra_text: str = '') -> None:
     """
     Prints the formatted message.
     
     Args:
-        message: The message to be printed.
+        message: The message to be printed (either dict or ChatMessage).
         token_counter: A function that takes in a string and returns the number of tokens in the string.
         testing: Add message type and token count in testing mode.
         extra_text: Extra text to be printed after the message in testing mode.
     """
-    if testing:
-        message = f"$$${message.type}$$$\t{message.content}\t$$${message.type}$$$"
-        if token_counter is not None:
-            message += f"\t***{token_counter(message)} tokens***"
-            message += extra_text
-        print(message)
+    # 处理dict格式的消息
+    if isinstance(message, dict):
+        message_type = message.get('role', 'unknown')
+        message_content = message.get('content', '')
     else:
-        print(message.content)
+        # 兼容原有的ChatMessage格式
+        message_type = message.type
+        message_content = message.content
+    
+    if testing:
+        formatted_message = f"$$${message_type}$$$\t{message_content}\t$$${message_type}$$$"
+        if token_counter is not None:
+            formatted_message += f"\t***{token_counter(message_content)} tokens***"
+            formatted_message += extra_text
+        print(formatted_message)
+    else:
+        print(message_content)
 
 def parse_action(string: str):
     """
@@ -209,13 +218,13 @@ def save_trajectories_log(path: str, log: str = None, dicts: list = None, true_l
         run_name: The name of the run.
     """
     if save_log:
-        with open(f'{path}/{run_name}.txt', 'w') as f:
+        with open(f'{path}/{run_name}.txt', 'w', encoding='utf-8') as f:
             f.write(log)
     if save_dict:
         with open(f'{path}/{run_name}.pkl', 'wb') as f:
             pickle.dump(dicts, f)
     if save_true_log:
-        with open(f'{path}/{run_name}_true.txt', 'w') as f:
+        with open(f'{path}/{run_name}_true.txt', 'w', encoding='utf-8') as f:
             f.write(true_log)
 
 def load_trajectories_log(path: str, load_log: bool = True, load_dict: bool = True, load_true_log: bool = False, run_name: str = 'run') -> Dict[str, Any]:
@@ -234,13 +243,13 @@ def load_trajectories_log(path: str, load_log: bool = True, load_dict: bool = Tr
     """
     out = dict()
     if load_log:
-        with open(f'{path}/{run_name}.txt', 'r') as f:
+        with open(f'{path}/{run_name}.txt', 'r', encoding='utf-8') as f:
             out['log'] = f.read()
     if load_dict:
         with open(f'{path}/{run_name}.pkl', 'rb') as f:
             out['dicts'] = pickle.load(f)
     if load_true_log:
-        with open(f'{path}/{run_name}_true.txt', 'r') as f:
+        with open(f'{path}/{run_name}_true.txt', 'r', encoding='utf-8') as f:
             out['true_log'] = f.read()
         
     return out

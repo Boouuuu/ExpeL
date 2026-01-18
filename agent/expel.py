@@ -127,6 +127,11 @@ class ExpelAgent(ReflectAgent):
             self.critiques[task] = []
         if return_log:
             log = ''
+        # 检查键是否存在
+        if task not in self.succeeded_trial_history:
+            self.succeeded_trial_history[task] = []
+        if task not in self.failed_trial_history:
+            self.failed_trial_history[task] = []
         if self.succeeded_trial_history[task] != []:
             # if first time critiquing the task
             for traj in self.succeeded_trial_history[task]:
@@ -199,7 +204,7 @@ class ExpelAgent(ReflectAgent):
             else:
                 self.all_fail_critiques[task] = []
 
-    def _build_critique_prompt(self, success_history: Trajectory, fail_history: str = Trajectory, existing_rules: List[str] = None, task: str = None, reflections: List[str] = None) -> List[HumanMessage]:
+    def _build_critique_prompt(self, success_history: Trajectory, fail_history: str = Trajectory, existing_rules: List[str] = None, task: str = None, reflections: List[str] = None) -> List[dict]:
         critique_history = []
         if reflections is not None:
             critique_type = 'all_reflection'
@@ -214,14 +219,18 @@ class ExpelAgent(ReflectAgent):
         if existing_rules == []:
             existing_rules = ['']
 
-        # system prompt
-        critique_history.extend(self.system_prompt.format_messages(
+        # system prompt - 使用dict格式
+        system_content = self.system_prompt['content'].format(
             instruction=self.system_critique_instructions[critique_type].format(
                 fewshots=[],
             ),
             ai_name='an advanced reasoning agent that can critique past task trajectories of youself' if existing_rules is None \
                 else 'an advanced reasoning agent that can add, edit or remove rules from your existing rule set, based on forming new critiques of past task trajectories',
-        ))
+        )
+        critique_history.append({
+            'role': self.system_prompt['role'],
+            'content': system_content
+        })
         # task_prompt
         human_format_dict = dict(instruction='',)
         if critique_type == 'compare':
@@ -235,10 +244,22 @@ class ExpelAgent(ReflectAgent):
             human_format_dict['reflections_list'] = '- ' + '\n- '.join(reflections)
         if existing_rules is not None:
             human_format_dict['existing_rules'] = '\n'.join([f'{i}. {r}' for i, r in enumerate(existing_rules, 1)])
-        human_critique_summary_message = self.human_critiques[critique_type].format_messages(**human_format_dict)[0]
-        critique_summary_suffix = self.critique_summary_suffix['full'] if self.max_num_rules <= len(self.rule_items_with_count) else self.critique_summary_suffix['not_full']
-        human_critique_summary_message.content = human_critique_summary_message.content + critique_summary_suffix
-        critique_history.append(human_critique_summary_message)
+        # 使用dict格式
+        human_critique_template = self.human_critiques[critique_type]
+        if hasattr(human_critique_template, 'format_messages'):
+            # 兼容langchain格式
+            human_critique_summary_message = human_critique_template.format_messages(**human_format_dict)[0]
+            critique_summary_suffix = self.critique_summary_suffix['full'] if self.max_num_rules <= len(self.rule_items_with_count) else self.critique_summary_suffix['not_full']
+            human_critique_content = human_critique_summary_message.content + critique_summary_suffix
+            critique_history.append({'role': 'human', 'content': human_critique_content})
+        else:
+            # dict格式
+            human_critique_content = human_critique_template['content'].format(**human_format_dict)
+            critique_summary_suffix = self.critique_summary_suffix['full'] if self.max_num_rules <= len(self.rule_items_with_count) else self.critique_summary_suffix['not_full']
+            critique_history.append({
+                'role': human_critique_template.get('role', 'human'),
+                'content': human_critique_content + critique_summary_suffix
+            })
         return critique_history
 
     def prepare_new_eval(self) -> None:
@@ -332,11 +353,16 @@ class ExpelAgent(ReflectAgent):
                 loaded_dict['critique_summary_idx'][0] == training_id):
                 resume_flag = True
                 # if there are still failed tasks to do, then dont continue, otherwise do the next idx's critiques
-                if len(self.failed_trial_history[training_task]) - 1 <= loaded_dict['critique_summary_idx'][1]:
+                if len(self.failed_trial_history.get(training_task, [])) - 1 <= loaded_dict['critique_summary_idx'][1]:
                     fail_resume_flag = True
                     continue
             elif not resume_flag:
                 continue
+            # 检查键是否存在
+            if training_task not in self.succeeded_trial_history:
+                self.succeeded_trial_history[training_task] = []
+            if training_task not in self.failed_trial_history:
+                self.failed_trial_history[training_task] = []
             if self.succeeded_trial_history[training_task] != []:
                 # if first time critiquing the task
                 for traj in self.succeeded_trial_history[training_task]:
@@ -407,9 +433,18 @@ class ExpelAgent(ReflectAgent):
             return ReflectAgent.insert_before_task_prompt(self)
         # if eval, add the manual
         if not self.no_rules:
-            self.prompt_history.append(
-                self.rule_template.format_messages(rules=self.rules)[0]
-            )
+            # 使用dict格式
+            rule_template = self.rule_template
+            if hasattr(rule_template, 'format_messages'):
+                # 兼容langchain格式
+                rule_message = rule_template.format_messages(rules=self.rules)[0]
+                self.prompt_history.append({'role': 'human', 'content': rule_message.content})
+            else:
+                # dict格式
+                self.prompt_history.append({
+                    'role': rule_template.get('role', 'human'),
+                    'content': rule_template['content'].format(rules=self.rules)
+                })
 
     def insert_after_task_prompt(self):
         pass
@@ -653,13 +688,18 @@ class ExpelAgent(ReflectAgent):
         new_fewshots = '\n\n'.join(self.fewshots)
         replaced = False
         for i, history_message in enumerate(self.prompt_history):
-            if old_fewshots in history_message.content:
-                message_type = type(history_message)
-                self.prompt_history[i] = message_type(content=history_message.content.replace(old_fewshots, new_fewshots))
+            message_content = history_message['content'] if isinstance(history_message, dict) else history_message.content
+            if old_fewshots in message_content:
+                # 使用dict格式
+                message_role = history_message['role'] if isinstance(history_message, dict) else 'human'
+                self.prompt_history[i] = {
+                    'role': message_role,
+                    'content': message_content.replace(old_fewshots, new_fewshots)
+                }
                 replaced = True
                 break
         if not replaced and self.testing:
-            self.prompt_history.append(HumanMessage(content="WARNING. Fewshots haven't been replaced."))
+            self.prompt_history.append({'role': 'human', 'content': "WARNING. Fewshots haven't been replaced."})
 
 # Utils function
 def parse_rules(llm_text):

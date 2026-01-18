@@ -122,16 +122,22 @@ SYSTEM_INSTRUCTION = """Solve a question answering task with interleaving Though
 human_instruction_template = """{instruction}You may take maximum of {max_steps} steps.
 Here are some examples:"""
 
-HUMAN_INSTRUCTION = HumanMessagePromptTemplate.from_template(human_instruction_template)
-
+# HUMAN_INSTRUCTION = HumanMessagePromptTemplate.from_template(human_instruction_template)
+HUMAN_INSTRUCTION = {
+            "role": "human",
+            "content": human_instruction_template,
+        }
 human_instruction_reflection_template = """Here are some examples:"""
-HUMAN_REFLECTION_INSTRUCTION = HumanMessagePromptTemplate.from_template(human_instruction_reflection_template)
-
+# HUMAN_REFLECTION_INSTRUCTION = HumanMessagePromptTemplate.from_template(human_instruction_reflection_template)
+HUMAN_REFLECTION_INSTRUCTION = {
+            "role": "human",
+            "content": human_instruction_reflection_template,
+        }
 SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION = """You will be given two previous task trials in which you were given access to a Docstore API environment and a question to answer: one successful and one unsuccessful trial. You failed the trial either because you guessed the wrong answer with Finish[<answer>], or you used up your set number of reasoning steps."""
 SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION = """You will be given successful tasks trials in which you were given access to a Docstore API environment and a question to answer."""
 SYSTEM_REFLECTION_INSTRUCTION = """You will be given a previous reasoning trial in which you were given access to a Docstore API environment and a question to answer. You were unsuccessful in answering the question either because you guessed the wrong answer with Finish[<answer>], or you used up your set number of reasoning steps. In a few sentences, Diagnose a possible reason for failure and devise a new, concise, high level plan that aims to mitigate the same failure. Use complete sentences."""
 
-def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[ChatMessage, str, Dict[str, Any]]:
+def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[dict, str, Dict[str, Any]]:
     pattern = r'(?i)action\s*(?:\d+|)\s*(?::|)\s*'
     action_pattern = r'(?i)\w+\[[^\]]+(?:\]|)'
 
@@ -142,13 +148,13 @@ def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[ChatMessage, st
 
         if len(re.findall(action_pattern, action)) > 1:
             return (
-                AIMessage(content=content) if ai_message else HumanMessage(content=content),
+                {'role': 'ai' if ai_message else 'human', 'content': content},
                 'action',
                 {'action': ''} # triggers invalid action
             )
 
         return (
-            AIMessage(content=content) if ai_message else HumanMessage(content=content),
+            {'role': 'ai' if ai_message else 'human', 'content': content},
             'action',
             {'action': action}
         )
@@ -160,7 +166,7 @@ def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[ChatMessage, st
             action += ']'
         content = f"Action {step}: {action}"
         return (
-            AIMessage(content=content) if ai_message else HumanMessage(content=content),
+            {'role': 'ai' if ai_message else 'human', 'content': content},
             'action',
             {'action': action}
         )
@@ -168,7 +174,7 @@ def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[ChatMessage, st
     if len(actions) > 1:
         content = re.sub(r"(?i)action\s*(?:\d*|)\s*(?::|)", "", llm_output)
         return (
-            AIMessage(content=f"Action {step}: {content}"),
+            {'role': 'ai', 'content': f"Action {step}: {content}"},
             'action',
             {'action': ''} # triggers invalid action
         )
@@ -183,13 +189,13 @@ def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[ChatMessage, st
     else:
         content = f"Thought {step}: {llm_output.rstrip(':')}"
     return (
-        AIMessage(content=content) if ai_message else HumanMessage(content=content),
+        {'role': 'ai' if ai_message else 'human', 'content': content},
         'thought',
         {}
     )
 
-def OBSERVATION_FORMATTER(observation: str, step: int, *args, **kwargs) -> Tuple[ChatMessage, str]:
-    return HumanMessage(content=f"Observation {step}: " + observation.rstrip(':')), 'append'
+def OBSERVATION_FORMATTER(observation: str, step: int, *args, **kwargs) -> Tuple[dict, str]:
+    return {'role': 'human', 'content': f"Observation {step}: " + observation.rstrip(':')}, 'append'
 
 def STEP_IDENTIFIER(line: str) -> str:
     line = line.strip()

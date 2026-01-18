@@ -6,17 +6,33 @@ human_instruction_fewshots_template = """{instruction}
 
 (END OF EXAMPLES)
 """
-human_instruction_fewshot_message_prompt = lambda message_type: \
-    SystemMessagePromptTemplate.from_template(
-        human_instruction_fewshots_template,
-    ) if message_type == 'all_system' else \
-        HumanMessagePromptTemplate.from_template(human_instruction_fewshots_template,)
+# human_instruction_fewshot_message_prompt = lambda message_type: \
+#     SystemMessagePromptTemplate.from_template(
+#         human_instruction_fewshots_template,
+#     ) if message_type == 'all_system' else \
+#         HumanMessagePromptTemplate.from_template(human_instruction_fewshots_template,)
+def human_instruction_fewshot_message_prompt(message_type):
+    message_dict = {}
+    # 根据message_type设置不同角色
+    if message_type == 'all_system':
+        message_dict["role"] = "system"
+    else:
+        message_dict["role"] = "human"
+    # 公共内容：赋值模板字符串（保持纯字典格式，不依赖LangChain）
+    message_dict["content"] = human_instruction_fewshots_template
+    return message_dict
+    
+    
 
 human_task_template = """Now it's your turn!
 {task}"""
-human_task_message_prompt = HumanMessagePromptTemplate.from_template(
-    human_task_template,
-)
+# human_task_message_prompt = HumanMessagePromptTemplate.from_template(
+#     human_task_template,
+# )
+human_task_message_prompt = {
+    "role": "human",
+    "content": human_task_template,
+}
 
 FORMAT_RULES_OPERATION_TEMPLATE = """<OPERATION> <RULE NUMBER>: <RULE>
 

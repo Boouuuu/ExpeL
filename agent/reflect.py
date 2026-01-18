@@ -52,17 +52,17 @@ class ReflectAgent(ReactAgent):
 
     def step(self) -> None:
         ReactAgent.step(self)
-        trial = self.prompt_history[self.history_index].content.split(self.remove_task_suffix(self.task), 1)[-1].strip()
+        trial = self.prompt_history[self.history_index]['content'].split(self.remove_task_suffix(self.task), 1)[-1].strip()
         steps = self.message_step_splitter(
             lines=trial,
             cycler=self.message_splitter,
             step_identifier=self.identifier)
-        self.previous_trial.append(HumanMessage(content=steps[-1]))
+        self.previous_trial.append({'role': 'human', 'content': steps[-1]})
 
 
     def reflect(self) -> None:
         self._format_reflection_scratchpad()
-        self.reflection_prompt_history.append(HumanMessage(content=self.reflection_prefix))
+        self.reflection_prompt_history.append({'role': 'human', 'content': self.reflection_prefix})
         reflection = self.prompt_reflection()
         self.reflections.append(reflection)
         self.formatted_reflection = self.format_reflections(self.reflections)
@@ -72,14 +72,14 @@ class ReflectAgent(ReactAgent):
 
     def insert_before_task_prompt(self) -> None:
         if self.formatted_reflection is not None:
-            self.prompt_history.append(HumanMessage(content=self.formatted_reflection))
+            self.prompt_history.append({'role': 'human', 'content': self.formatted_reflection})
 
     def prompt_reflection(self) -> str:
         self.reflection_prompt_history = self.collapse_prompts(self.reflection_prompt_history)
         if self.benchmark_name == 'webshop':
             # match the last "Observation:"
             pattern = r"\nObservation: (.*[\n]+)+Next plan:.*"
-            matches = re.findall(pattern, self.reflection_prompt_history[-1].content)
+            matches = re.findall(pattern, self.reflection_prompt_history[-1]['content'])
             if 'Ran out of steps' in matches[-1]:
                 add_text = "\nObservation: Ran out of steps! TASK FAILED\n\nNext plan:\n"
             elif 'Repeated action' in matches[-1]:
@@ -87,10 +87,10 @@ class ReflectAgent(ReactAgent):
             else:
                 add_text = "\nObservation: Wrong item! TASK FAILED\n\nNext plan:\n"
 
-            new_history = self.reflection_prompt_history[-1].content.split(matches[-1])
+            new_history = self.reflection_prompt_history[-1]['content'].split(matches[-1])
             new_history = ''.join(new_history[:-1]) + add_text
 
-            self.reflection_prompt_history[-1].content = new_history
+            self.reflection_prompt_history[-1]['content'] = new_history
 
         if self.testing:
             print('###################################')
@@ -106,8 +106,12 @@ class ReflectAgent(ReactAgent):
         # avoid building reflection prompt if it already exists
         if self.reflection_prompt_history != []:
             return
-        system_prompt = self.system_prompt.format_messages(**self.reflection_system_kwargs)
-        self.reflection_prompt_history.extend(system_prompt)
+        # 使用dict格式
+        system_prompt = {
+            'role': self.system_prompt['role'],
+            'content': self.system_prompt['content'].format(**self.reflection_system_kwargs)
+        }
+        self.reflection_prompt_history.append(system_prompt)
         self._build_fewshot_prompt(
             fewshots=self.reflection_fewshots,
             prompt_history=self.reflection_prompt_history,
@@ -115,19 +119,22 @@ class ReflectAgent(ReactAgent):
             instruction_prompt_kwargs={},
             prompt_type='reflect_type',
         )
-        self.reflection_prompt_history.append(HumanMessage(content=f'Previous trial:\n{self.remove_task_suffix(self.task)}'))
+        self.reflection_prompt_history.append({
+            'role': 'human',
+            'content': f'Previous trial:\n{self.remove_task_suffix(self.task)}'
+        })
         self.reflect_interaction_idx = len(self.reflection_prompt_history)
         for message in self.previous_trial:
             self.reflection_prompt_history.append(message)
 
     def _format_reflection_scratchpad(self) -> str:
-        lines = [ref.content for ref in self.reflection_prompt_history[self.reflect_interaction_idx:]]
+        lines = [ref['content'] for ref in self.reflection_prompt_history[self.reflect_interaction_idx:]]
         lines_by_tokens = sorted(lines, key=lambda x: self.token_counter(x))
         while self.token_counter(''.join(lines)) > 12000:
             ind = lines.index(lines_by_tokens.pop(-1))
             line = lines[ind]
             lines[ind]  = line.split(':')[0] + ': ...'
-        combined_message = HumanMessage(content='\n'.join(lines))
+        combined_message = {'role': 'human', 'content': '\n'.join(lines)}
         self.reflection_prompt_history = self.reflection_prompt_history[:self.reflect_interaction_idx]
         self.reflection_prompt_history.append(combined_message)
 
