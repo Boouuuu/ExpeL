@@ -6,6 +6,13 @@ from functools import partial
 import os
 import random
 
+# 设置代理（如果需要访问维基百科）
+try:
+    from setup_proxy import setup_proxy
+    setup_proxy()
+except Exception as e:
+    print(f"Warning: Failed to setup proxy: {e}")
+
 from agent import AGENT
 from langchain.chat_models import ChatOpenAI
 from prompts.templates.system import system_message_prompt

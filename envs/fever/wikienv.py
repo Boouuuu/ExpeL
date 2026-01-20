@@ -23,9 +23,11 @@ class textSpace(gym.spaces.Space):
 
 class WikiEnv(gym.Env):
 
-  def __init__(self):
+  def __init__(self, proxies=None):
     """
       Initialize the environment.
+      Args:
+        proxies: dict of proxy settings, e.g. {'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'}
     """
     super().__init__()
     self.page = None  # current Wikipedia page
@@ -38,6 +40,7 @@ class WikiEnv(gym.Env):
     self.observation_space = self.action_space = textSpace()
     self.search_time = 0
     self.num_searches = 0
+    self.proxies = proxies  # 添加代理支持
     
   def _get_obs(self):
     return self.obs
@@ -103,12 +106,27 @@ class WikiEnv(gym.Env):
     entity_ = entity.replace(" ", "+")
     search_url = f"https://en.wikipedia.org/w/index.php?search={entity_}"
     old_time = time.time()
-    while True:
+    retry_count = 0
+    max_retries = 3
+    headers = {
+        "User-Agent": "curl/8.4.0",
+        "Accept": "*/*",
+        "Host": "en.wikipedia.org",
+        "Connection": "keep-alive",
+        "Accept-Encoding": "gzip, deflate, br",
+        # 移除可能触发反爬的头：Referer、Accept-Language等
+    }
+    while retry_count < max_retries:
       try:
-        response_text = requests.get(search_url).text
+        # 使用代理（如果设置了）
+        response_text = requests.get(search_url, proxies=self.proxies, timeout=(10, 30), allow_redirects=True, verify=False, headers=headers).text
         break
-      except:
-        pass
+      except Exception as e:
+        retry_count += 1
+        if retry_count >= max_retries:
+          print(f"Failed to connect to Wikipedia after {max_retries} attempts: {e}")
+          raise
+        time.sleep(1)
     self.search_time += time.time() - old_time
     self.num_searches += 1
     soup = BeautifulSoup(response_text, features="html.parser")

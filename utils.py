@@ -544,14 +544,23 @@ def get_split_eval_idx_list(agent_dict: Dict[str, Any], n_folds: int) -> List[Li
     success_dict = {env_name: [] for env_name in env_names}
     fail_dict = {env_name: [] for env_name in env_names}
     for task, trials in agent_dict['succeeded_trial_history'].items():
+        # 检查键是否存在
+        if task not in agent_dict['failed_trial_history']:
+            agent_dict['failed_trial_history'][task] = []
+        
         if len(trials) > 0:
             if len(agent_dict['failed_trial_history'][task]) > 0:
                 compare_dict[get_env_name_from_task(task, agent_dict['benchmark_name'])].append(task2idx[task])
             else:
                 success_dict[get_env_name_from_task(task, agent_dict['benchmark_name'])].append(task2idx[task])
         else:
-            assert len(agent_dict['failed_trial_history'][task]) > 0
-            fail_dict[get_env_name_from_task(task, agent_dict['benchmark_name'])].append(task2idx[task])
+            # 只有在有失败试验时才添加到fail_dict
+            if len(agent_dict['failed_trial_history'][task]) > 0:
+                fail_dict[get_env_name_from_task(task, agent_dict['benchmark_name'])].append(task2idx[task])
+            # 如果既没有成功也没有失败，跳过这个任务
+            else:
+                print(f'task {task} has no failed trials')
+                continue
 
     # split into n_folds
     j = 0

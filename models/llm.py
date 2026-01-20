@@ -6,6 +6,61 @@ from langchain.schema import ChatMessage
 import openai
 
 
+# client = openai.OpenAI(
+#     # 若没有配置环境变量，请用百炼API Key将下行替换为：api_key="sk-xxx"
+#     api_key="sk-a3b1a801d70747a0b7d3b2797a14ab05",
+#     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+# )
+
+def replace_invalid_roles(messages):
+    """
+    批量替换messages中的非法角色名：
+    - human → user（用户角色）
+    - ai → assistant（助手/AI角色）
+    支持嵌套结构，深拷贝保护原数据
+    
+    Args:
+        messages (list): 原始消息列表，每个元素是含"role"键的字典
+    
+    Returns:
+        list: 替换后的合法消息列表
+    """
+    import copy
+    processed_messages = copy.deepcopy(messages)
+    
+    # 定义非法角色到合法角色的映射
+    role_mapping = {
+        "human": "user",    # 人类提问者 → user
+        "ai": "assistant"   # AI回复者 → assistant
+    }
+    
+    for msg in processed_messages:
+        # 仅处理字典类型且包含role字段的元素
+        if isinstance(msg, dict) and "role" in msg:
+            # 如果当前role在映射表中，替换为合法值
+            if msg["role"] in role_mapping:
+                msg["role"] = role_mapping[msg["role"]]
+    
+    return processed_messages
+def generate_one_completion(messages):
+    openai.api_key = "sk-a3b1a801d70747a0b7d3b2797a14ab05"
+    openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    messages = replace_invalid_roles(messages)
+    # completion = client.chat.completions.create(
+    completion = openai.ChatCompletion.create(
+        model="qwen-flash",  # 修正：模型名改为官方兼容版
+        messages=messages,
+        temperature=0.7,  # 新增：可选，控制回复随机性
+        max_tokens=1024,   # 新增：可选，限制回复长度
+        headers={
+            "Authorization": f"Bearer {openai.api_key}",
+            "Content-Type": "application/json"
+        }
+    )
+    # print(f"\n🔹 Generating for task: {task_id}")
+    # 修正：直接取属性，而非转JSON字符串（更高效）
+    return completion.choices[0].message.content
+
 class GPTWrapper:
     def __init__(self, llm_name: str, openai_api_key: str, long_ver: bool):
         self.model_name = llm_name
@@ -27,7 +82,8 @@ class GPTWrapper:
         for i in range(6):
             try:
                 # output = self.llm(messages, **kwargs).content.strip('\n').strip()
-                output = chatanywhere_llm(messages, self.openai_api_key)
+                # output = chatanywhere_llm(messages, self.openai_api_key)
+                output = generate_one_completion(messages)
                 if output == "":  # API调用失败
                     print(f'\nAPI call failed, retrying {i+1}/6...')
                     time.sleep(2)  # 等待2秒后重试
