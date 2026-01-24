@@ -1,0 +1,21 @@
+[
+    {
+        "question": "How to implement a function that calculates the factorial of a number using recursion, similar to the mathematical definition n! = n × (n-1)!?",
+        "key": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n-1)",
+        "test_cases": [
+            {"input": 5, "expected": 120},
+            {"input": 0, "expected": 1},
+            {"input": 1, "expected": 1}
+        ]
+    },
+    {
+        "question": "How to implement matrix multiplication following the mathematical formula C[i][j] = Σ(A[i][k] * B[k][j])?",
+        "key": "def matrix_multiply(A, B):\n    rows_A, cols_A = len(A), len(A[0])\n    rows_B, cols_B = len(B), len(B[0])\n    C = [[0] * cols_B for _ in range(rows_A)]\n    for i in range(rows_A):\n        for j in range(cols_B):\n            for k in range(cols_A):\n                C[i][j] += A[i][k] * B[k][j]\n    return C",
+        "test_cases": []
+    },
+    {
+        "question": "How to implement binary search algorithm based on the mathematical concept of divide and conquer?",
+        "key": "def binary_search(arr, target, left=0, right=None):\n    if right is None:\n        right = len(arr) - 1\n    if left > right:\n        return -1\n    mid = (left + right) // 2\n    if arr[mid] == target:\n        return mid\n    elif arr[mid] > target:\n        return binary_search(arr, target, left, mid - 1)\n    else:\n        return binary_search(arr, target, mid + 1, right)",
+        "test_cases": []
+    }
+]
