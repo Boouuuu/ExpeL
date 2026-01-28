@@ -1,0 +1,12 @@
+[
+    {"question": "Solve for x: 2x + 5 = 15", "key": "5"},
+    {"question": "What is 5! (factorial of 5)?", "key": "120"},
+    {"question": "Find gcd(48, 18) using the Euclidean algorithm.", "key": "6"},
+    {"question": "Solve the quadratic equation x² - 5x + 6 = 0. Give roots as comma-separated.", "key": "2, 3"},
+    {"question": "What is the sum 1 + 2 + ... + 10?", "key": "55"},
+    {"question": "Is 17 a prime number? Answer yes or no.", "key": "yes"},
+    {"question": "Solve for x: 3x - 7 = 8", "key": "5"},
+    {"question": "What is 2^10?", "key": "1024"},
+    {"question": "Simplify: (12 + 8) / 4", "key": "5"},
+    {"question": "What is 15 mod 7?", "key": "1"}
+]

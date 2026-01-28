@@ -1,0 +1,8 @@
+[
+    {"question": "How to implement a function that calculates the factorial of a number using recursion, similar to the mathematical definition n! = n × (n-1)!?", "key": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n-1)", "test_cases": []},
+    {"question": "How to implement matrix multiplication following the mathematical formula C[i][j] = Σ(A[i][k] * B[k][j])?", "key": "", "test_cases": []},
+    {"question": "How to implement binary search algorithm based on the mathematical concept of divide and conquer?", "key": "", "test_cases": []},
+    {"question": "How to implement the Euclidean algorithm for finding GCD based on gcd(a, b) = gcd(b, a mod b)?", "key": "", "test_cases": []},
+    {"question": "How to implement Fibonacci using dynamic programming with F(n) = F(n-1) + F(n-2)?", "key": "", "test_cases": []},
+    {"question": "How to implement a function that checks if a number is prime using the property that n is prime iff it has no divisors between 2 and √n?", "key": "", "test_cases": []}
+]
