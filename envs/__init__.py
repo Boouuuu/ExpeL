@@ -9,6 +9,7 @@ from .fever.fever import FeverEnv
 from .alfworld.alfworld import AlfworldEnv
 from .webshop.webshop import WebshopEnv
 from .math2code.math2code import Math2CodeEnv
+from .math2code_math.math_train_env import MathTrainEnv
 from utils import get_env_name_from_gamefile
 
 # Taken from ReAct Github
@@ -62,6 +63,15 @@ INIT_TASKS_FN = dict(
         },
         'env_name': 'math2code',
     } for row in json.load(open(cfg.benchmark.task_file, "r"))],
+    math2code_math=lambda cfg: [
+        {
+        'task': f'{cfg.benchmark.task_prefix}{row["question"]}',
+        'env_kwargs': {
+            'question': row['question'],
+            'key': row['key'],
+        },
+        'env_name': 'math2code_math',
+    } for row in json.load(open(cfg.benchmark.task_file, "r"))],
 )
 
-ENVS = dict(hotpotqa=QAEnv, fever=FeverEnv, alfworld=AlfworldEnv, webshop=WebshopEnv, math2code=Math2CodeEnv)
+ENVS = dict(hotpotqa=QAEnv, fever=FeverEnv, alfworld=AlfworldEnv, webshop=WebshopEnv, math2code=Math2CodeEnv, math2code_math=MathTrainEnv)

@@ -70,9 +70,10 @@ def main(cfg : DictConfig) -> None:
             elif res == 'y':
                 break
 
-    # Load trajectory checkpoint
+    # Load trajectory checkpoint (optional: load_log_path for cross-benchmark, e.g. insights from math2code_math)
+    load_base = Path(cfg.load_log_path) if getattr(cfg, 'load_log_path', None) else (SAVE_PATH if cfg.resume else LOG_PATH)
     out = load_trajectories_log(
-        SAVE_PATH if cfg.resume else LOG_PATH,
+        str(load_base),
         run_name=cfg.load_run_name,
         load_log=cfg.resume,
         load_true_log=cfg.resume)

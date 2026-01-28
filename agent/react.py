@@ -121,11 +121,15 @@ class ReactAgent(BaseAgent):
             self._last_observation_history = deepcopy(observation_history)        
         self.print_message(observation_history)
 
-        BaseAgent.after_step(self)
+        self.after_step()
 
         self.prompt_history = self.collapse_prompts(self.prompt_history)
 
         self.curr_step += 1
+
+    def after_step(self, *args, **kwargs) -> None:
+        """Override BaseAgent.after_step; no-op for base ReactAgent."""
+        pass
 
     def prompt_agent(self) -> str:
         self.prompt_history = self.collapse_prompts(self.prompt_history)

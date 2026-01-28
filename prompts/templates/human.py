@@ -98,11 +98,14 @@ The following are some experiences (in decreasing order of importance) you gathe
     alfworld=HumanMessagePromptTemplate.from_template("""The following are some experience you gather on a similar task of completing a household task by interacting in a household environment. Use these as references to help you perform this task:
 {rules}
 """),
-fever=HumanMessagePromptTemplate.from_template("""The following paragraph are insights a teacher agent provided to you. It is MANDATORY for you to follow these insights as CLOSELY as possible as they will help you perform the fact verification tasks efficiently:
+    fever=HumanMessagePromptTemplate.from_template("""The following paragraph are insights a teacher agent provided to you. It is MANDATORY for you to follow these insights as CLOSELY as possible as they will help you perform the fact verification tasks efficiently:
 
 In order to successfully complete factual verification tasks, begin by clearly understanding the claim. Then formulate a search query that is precise and directly related to the claim. Include the main subjects or context from the claim in your query. If the initial search doesn't yield desired results, consider refining the query, using synonyms, or breaking down the claim into smaller parts. Always verify the information you obtain against the claim before drawing a conclusion. If multiple searches fail, consider changing the search strategy or looking for related information that might indirectly provide the necessary information. If all else fails, consider that the answer might be found in the observations already made. When you're ready to draw a conclusion, double-check it against the information obtained and ensure its accuracy. Lastly, always be prepared to exhaust all possible search queries related to the task at hand before concluding. Remember, the claim can either be supported, refuted, or there might not be enough information to draw a conclusion.{rules}
 """),
-    math2code=HumanMessagePromptTemplate.from_template("""The following are some experience you gather on a similar task of translating mathematical concepts into code. Use these as references to help you perform this task:
+    math2code=HumanMessagePromptTemplate.from_template("""The following are the experiences you gained from solving mathematical problems. Transfer and apply these experiences as references to solve coding problems:
+{rules}
+"""),
+    math2code_math=HumanMessagePromptTemplate.from_template("""The following are some experience you gather on solving math problems. Use these as references to help you perform this task:
 {rules}
 """),
 )

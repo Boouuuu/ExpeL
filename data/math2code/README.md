@@ -2,103 +2,78 @@
 
 ## 概述
 
-Math2Code是基于ExpeL框架实现的数学领域到代码领域的知识迁移任务。它借鉴了HotpotQA的ReAct（Reasoning + Acting）思路，通过Thought-Action-Observation循环将数学概念翻译成代码实现。
+Math2Code 基于 ExpeL 实现**数学 → 代码**的知识迁移：  
+**训练阶段**用纯数学题（Thought / Reason / Calculate / Finish），保存做题轨迹；  
+**见解提取**从数学轨迹中抽取规则；  
+**评估阶段**用编程题（Analyze / Translate / Finish）评估迁移效果。
 
-## 文件结构
+## 流程
 
-```
-prompts/
-  └── math2code.py          # Math2Code的prompt定义（fewshots, instructions等）
+1. **Train（数学题）**：`benchmark=math2code_math`，数据 `train_tasks.json`，Agent 解数学题并保存轨迹。  
+2. **Insight extraction**：`benchmark=math2code_math`，从数学轨迹提取见解，保存到 `extracted_insights`。  
+3. **Eval（编程题）**：`benchmark=math2code`，数据 `eval_tasks.json`，加载见解后在代码题上评估。
 
-envs/
-  └── math2code/
-      ├── __init__.py
-      └── math2code.py       # Math2Code环境实现
+## 数据文件
 
-configs/
-  └── benchmark/
-      └── math2code.yaml     # Math2Code配置文件
+| 文件 | 用途 | 格式 |
+|------|------|------|
+| `train_tasks.json` | 训练：纯数学题 | `question`, `key` |
+| `eval_tasks.json` | 评估：编程题 | `question`, `key`, `test_cases`（可选） |
 
-data/
-  └── math2code/
-      └── tasks.json         # 任务数据文件
-```
+## Action 类型
 
-## Action类型
+### 训练（数学）`math2code_math`
 
-Math2Code定义了以下Action类型：
+- **Reason[step]**：推理步骤（代数、逻辑等），无计算。  
+- **Calculate[expression]**：计算数值表达式，如 `10/2`、`2+3`。  
+- **Finish[answer]**：给出最终答案并结束。
 
-1. **Analyze[mathematical_concept]** - 分析数学概念，理解其定义、性质和计算要求
-2. **Translate[code_pattern]** - 识别与数学概念对应的代码模式或结构
-3. **Verify[code_snippet]** - 验证代码片段是否正确实现了数学概念（可选）
-4. **Finish[code]** - 提供最终的代码实现并完成任务
+### 评估（代码）`math2code`
 
-## 使用方法
+- **Analyze[concept]**：分析数学概念。  
+- **Translate[pattern]**：对应到代码模式。  
+- **Verify[code]**（可选）：验证代码片段。  
+- **Finish[code]**：给出最终代码并结束。
 
-### 1. 准备数据
+## 使用示例
 
-编辑 `data/math2code/tasks.json`，添加你的任务：
-
-```json
-[
-    {
-        "question": "你的数学问题描述",
-        "key": "期望的代码实现",
-        "test_cases": [
-            {"input": ..., "expected": ...}
-        ]
-    }
-]
-```
-
-### 2. 运行训练
+### 1. 训练（数学题）
 
 ```bash
-python train.py benchmark=math2code agent_type=react run_name=math2code-run
+python train.py benchmark=math2code_math agent_type=react run_name=run testing=false resume=false > &run-train.log &
+# 或 agent_type=expel 做 reflection / 规则提取
 ```
 
-### 3. 运行评估
+轨迹保存在 `logs/math2code_math/<agent>/run.pkl` 等。
+
+### 2. 见解提取（从数学轨迹）
 
 ```bash
-python eval.py benchmark=math2code load_run_name=math2code-run run_name=eval-run
+python insight_extraction.py benchmark=math2code_math load_run_name=run run_name=insights-run agent.llm=gpt-4 ...
 ```
 
-## 特点
+见解保存在 `logs/math2code_math/<agent>/extracted_insights/insights-run.pkl`。
 
-- **无需外部API**：不依赖维基百科等外部API，使用本地代码执行环境
-- **代码验证**：通过实际执行代码来验证实现的正确性
-- **ReAct框架**：保留Thought-Action-Observation的推理步骤
-- **可扩展**：易于添加新的数学概念和代码模式
+### 3. 评估（编程题）
 
-## 自定义
+从**数学见解**所在目录加载，在**代码题**上评估：
 
-### 修改Few-shot示例
+```bash
+python eval.py benchmark=math2code \
+  load_log_path=logs/math2code_math/expel/extracted_insights \
+  load_run_name=insights-run run_name=eval-run \
+  agent.fewshot_strategy=task_similarity testing=false
+```
 
-编辑 `prompts/math2code.py` 中的 `FEWSHOTS` 列表，添加你的示例。
+`load_log_path` 指向见解目录，`load_run_name` 为 run 名（对应 `insights-run.pkl` 等）。
 
-### 修改Action类型
+## 配置文件
 
-在 `prompts/math2code.py` 的 `SYSTEM_INSTRUCTION` 中修改Action类型定义。
-
-### 增强代码验证
-
-在 `envs/math2code/math2code.py` 的 `success_fn()` 方法中添加更复杂的验证逻辑，例如：
-- 运行测试用例
-- 检查代码复杂度
-- 验证代码风格
-
-## 示例任务
-
-当前包含的示例任务：
-- 阶乘递归实现
-- 矩阵乘法
-- 二分查找
-- 欧几里得算法（GCD）
-- 斐波那契数列（动态规划）
-- 质数判断
+- `configs/benchmark/math2code_math.yaml`：训练用，`task_file: data/math2code/train_tasks.json`。  
+- `configs/benchmark/math2code.yaml`：评估用，`task_file: data/math2code/eval_tasks.json`。
 
 ## 注意事项
 
-- 代码执行环境需要Python环境
-- 出于安全考虑，代码执行有超时限制（5秒）
-- 建议在隔离环境中运行代码执行功能
+- 训练**仅数学**，无编程、无维基等外部 API。  
+- 评估使用代码执行验证；注意运行环境与超时设置。  
+- `plot_trial_stats` 等对非 alfworld 的 `len(parsed_result)==100` 断言已放宽，支持 math2code / math2code_math 的任务数。

@@ -1,7 +1,7 @@
 from typing import Callable, List
 
 from . import alfworld
-from . import hotpotQA, fever, webshop, math2code
+from . import hotpotQA, fever, webshop, math2code, math2code_math
 from .templates.human import *
 from .templates.system import *
 
@@ -11,6 +11,7 @@ FEWSHOTS = dict(
     alfworld=alfworld.FEWSHOTS,
     webshop=webshop.FEWSHOTS,
     math2code=math2code.FEWSHOTS,
+    math2code_math=math2code_math.FEWSHOTS,
 )
 REFLECTION_FEWSHOTS = dict(
     hotpotqa=hotpotQA.REFLECTION_FEWSHOTS,
@@ -18,6 +19,7 @@ REFLECTION_FEWSHOTS = dict(
     alfworld=alfworld.REFLECTION_FEWSHOTS,
     webshop=webshop.REFLECTION_FEWSHOTS,
     math2code=math2code.REFLECTION_FEWSHOTS,
+    math2code_math=math2code_math.REFLECTION_FEWSHOTS,
 )
 SYSTEM_INSTRUCTION = dict(
     hotpotqa=hotpotQA.SYSTEM_INSTRUCTION,
@@ -25,6 +27,7 @@ SYSTEM_INSTRUCTION = dict(
     alfworld=alfworld.SYSTEM_INSTRUCTION,
     webshop=webshop.SYSTEM_INSTRUCTION,
     math2code=math2code.SYSTEM_INSTRUCTION,
+    math2code_math=math2code_math.SYSTEM_INSTRUCTION,
 )
 SYSTEM_REFLECTION_INSTRUCTION = dict(
     hotpotqa=hotpotQA.SYSTEM_REFLECTION_INSTRUCTION,
@@ -32,6 +35,7 @@ SYSTEM_REFLECTION_INSTRUCTION = dict(
     alfworld=None,#alfworld.SYSTEM_REFLECTION_INSTRUCTION,
     webshop=None,#webshop.SYSTEM_REFLECTION_INSTRUCTION,
     math2code=math2code.SYSTEM_REFLECTION_INSTRUCTION,
+    math2code_math=math2code_math.SYSTEM_REFLECTION_INSTRUCTION,
 )
 HUMAN_INSTRUCTION = dict(
     hotpotqa=hotpotQA.HUMAN_INSTRUCTION,
@@ -39,6 +43,7 @@ HUMAN_INSTRUCTION = dict(
     alfworld=alfworld.HUMAN_INSTRUCTION,
     webshop=webshop.HUMAN_INSTRUCTION,
     math2code=math2code.HUMAN_INSTRUCTION,
+    math2code_math=math2code_math.HUMAN_INSTRUCTION,
 )
 HUMAN_REFLECTION_INSTRUCTION = dict(
     hotpotqa=hotpotQA.HUMAN_REFLECTION_INSTRUCTION,
@@ -46,6 +51,7 @@ HUMAN_REFLECTION_INSTRUCTION = dict(
     alfworld=alfworld.HUMAN_REFLECTION_INSTRUCTION,
     webshop=webshop.HUMAN_REFLECTION_INSTRUCTION,
     math2code=math2code.HUMAN_REFLECTION_INSTRUCTION,
+    math2code_math=math2code_math.HUMAN_REFLECTION_INSTRUCTION,
 )
 SYSTEM_CRITIQUE_INSTRUCTION = dict(
     hotpotqa=dict(
@@ -68,67 +74,71 @@ SYSTEM_CRITIQUE_INSTRUCTION = dict(
         compare_existing_rules=math2code.SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION,
         all_success_existing_rules=math2code.SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION,
     ),
+    math2code_math=dict(
+        compare_existing_rules=math2code_math.SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION,
+        all_success_existing_rules=math2code_math.SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION,
+    ),
 )
 
 LLM_PARSER = dict(
     hotpotqa=hotpotQA.LLM_PARSER,
-    # fever and hotpotQA has same format
     fever=hotpotQA.LLM_PARSER,
     alfworld=alfworld.LLM_PARSER,
     webshop=webshop.LLM_PARSER,
     math2code=math2code.LLM_PARSER,
+    math2code_math=math2code_math.LLM_PARSER,
 )
 
 OBSERVATION_FORMATTER = dict(
     hotpotqa=hotpotQA.OBSERVATION_FORMATTER,
-    # fever and hotpotQA has same format
     fever=hotpotQA.OBSERVATION_FORMATTER,
     alfworld=alfworld.OBSERVATION_FORMATTER,
     webshop=webshop.OBSERVATION_FORMATTER,
     math2code=math2code.OBSERVATION_FORMATTER,
+    math2code_math=math2code_math.OBSERVATION_FORMATTER,
 )
 
 STEP_IDENTIFIER = dict(
     hotpotqa=hotpotQA.STEP_IDENTIFIER,
-    # fever and hotpotQA has same format
     fever=hotpotQA.STEP_IDENTIFIER,
     webshop=webshop.STEP_IDENTIFIER,
     alfworld=alfworld.STEP_IDENTIFIER,
     math2code=math2code.STEP_IDENTIFIER,
+    math2code_math=math2code_math.STEP_IDENTIFIER,
 )
 
 CYCLER = dict(
     hotpotqa=hotpotQA.CYCLER,
     fever=hotpotQA.CYCLER,
-    # fever and hotpotQA has same format
     webshop=webshop.CYCLER,
     alfworld=alfworld.CYCLER,
     math2code=math2code.CYCLER,
+    math2code_math=math2code_math.CYCLER,
 )
 REFLECTION_PREFIX = dict(
     hotpotqa=hotpotQA.REFLECTION_PREFIX,
     fever=hotpotQA.REFLECTION_PREFIX,
     alfworld=alfworld.REFLECTION_PREFIX,
-    # same format as alfworld
     webshop=webshop.REFLECTION_PREFIX,
     math2code=math2code.REFLECTION_PREFIX,
+    math2code_math=math2code_math.REFLECTION_PREFIX,
 )
 PREVIOUS_TRIALS_FORMATTER=dict(
     hotpotqa=hotpotQA.PREVIOUS_TRIALS_FORMATTER,
     fever=hotpotQA.PREVIOUS_TRIALS_FORMATTER,
     alfworld=alfworld.PREVIOUS_TRIALS_FORMATTER,
-    # same format as alfworld
     webshop=webshop.PREVIOUS_TRIALS_FORMATTER,
     math2code=math2code.PREVIOUS_TRIALS_FORMATTER,
+    math2code_math=math2code_math.PREVIOUS_TRIALS_FORMATTER,
 )
 
 STEP_STRIPPER = dict(
     hotpotqa=hotpotQA.STEP_STRIPPER,
     fever=hotpotQA.STEP_STRIPPER,
     alfworld=alfworld.STEP_STRIPPER,
-    # same format as alfworld
     webshop=webshop.STEP_STRIPPER,
     math2code=math2code.STEP_STRIPPER,
+    math2code_math=math2code_math.STEP_STRIPPER,
 )
 
 def STEP_CYCLER(benchmark: str, lines: str, cycler: Callable, step_identifier: Callable, stripper: Callable = lambda x, y: x) -> List[str]:
