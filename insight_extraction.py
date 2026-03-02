@@ -57,7 +57,7 @@ def main(cfg : DictConfig) -> None:
         openai_api_key = os.environ['OPENAI_API_KEY'] if 'OPENAI_API_KEY' in os.environ else getpass.getpass("Enter or paste your OpenAI API Key: ")
     LOG_PATH = Path('/'.join([cfg.log_dir, cfg.benchmark.name, cfg.agent_type]))
     SAVE_PATH = LOG_PATH / 'extracted_insights'
-    SAVE_PATH.mkdir(exist_ok=True)
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)
     
     # Overwriting confirmation
     if not cfg.resume and os.path.exists(f"{SAVE_PATH}/{cfg.run_name}.pkl") and cfg.run_name != 'test':
@@ -145,7 +145,11 @@ def main(cfg : DictConfig) -> None:
     for k, eval_idxs in enumerate(eval_idx_list):
         if k < starting_fold:
             continue
-        training_ids = set(range(num_training_tasks)) - set(eval_idxs)
+        # 当k_folds=1时，用所有数据进行训练；否则使用常规的交叉验证分割
+        if cfg.benchmark.eval_configs.k_folds <= 1:
+            training_ids = set(range(num_training_tasks))
+        else:
+            training_ids = set(range(num_training_tasks)) - set(eval_idxs)
         (SAVE_PATH / f"fold_{k}").mkdir(exist_ok=True)
         log += f'################## FOLD {k} ##################\n'
         log += react_agent.create_rules(

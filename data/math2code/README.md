@@ -40,7 +40,7 @@ Math2Code 基于 ExpeL 实现**数学 → 代码**的知识迁移：
 ### 1. 训练（数学题）
 
 ```bash
-python train.py benchmark=math2code_math agent_type=react run_name=run testing=false resume=false > &run-train.log &
+python train.py benchmark=math2code_math run_name=run-glm testing=false resume=false > run-train.log 2>&1
 # 或 agent_type=expel 做 reflection / 规则提取
 ```
 
@@ -49,7 +49,7 @@ python train.py benchmark=math2code_math agent_type=react run_name=run testing=f
 ### 2. 见解提取（从数学轨迹）
 
 ```bash
-python insight_extraction.py benchmark=math2code_math load_run_name=run run_name=insights-run agent.llm=gpt-4 ...
+python insight_extraction.py benchmark=math2code_math load_run_name=run-gpt run_name=insights-mathscode-run agent.llm=gpt-4.7 agent.max_num_rules=30 agent.success_critique_num=2 testing=false resume=false > run-insights.log 2>&1
 ```
 
 见解保存在 `logs/math2code_math/<agent>/extracted_insights/insights-run.pkl`。
@@ -59,10 +59,9 @@ python insight_extraction.py benchmark=math2code_math load_run_name=run run_name
 从**数学见解**所在目录加载，在**代码题**上评估：
 
 ```bash
-python eval.py benchmark=math2code \
-  load_log_path=logs/math2code_math/expel/extracted_insights \
-  load_run_name=insights-run run_name=eval-run \
-  agent.fewshot_strategy=task_similarity testing=false
+python eval.py benchmark=math2code load_run_name=extracted_insights/insights-mathscode-run run_name=eval-run agent.fewshot_strategy=task_similarity testing=false resume=false
+
+python eval.py benchmark=math2code load_run_name=extracted_insights/run run_name=eval-run agent.fewshot_strategy=task_similarity testing=false resume=false
 ```
 
 `load_log_path` 指向见解目录，`load_run_name` 为 run 名（对应 `insights-run.pkl` 等）。

@@ -153,8 +153,10 @@ def parse_action(string: str):
         action_type: action type
         argument: argument
     """
-    pattern = r'^(\w+)\[(.+)\]$'
-    match = re.match(pattern, string)
+    # Support multiline arguments inside [...] (e.g., code blocks in Finish[...])
+    # and allow empty arguments if the caller ever uses Action[].
+    pattern = r'^(\w+)\[(.*)\]$'
+    match = re.match(pattern, string, flags=re.DOTALL)
     
     if match:
         action_type = match.group(1)
@@ -253,6 +255,14 @@ def load_trajectories_log(path: str, load_log: bool = True, load_dict: bool = Tr
             out['true_log'] = f.read()
         
     return out
+
+
+def format_math2code_log(s: str) -> str:
+    """Insert newlines before Observation/Action/Thought blocks for readable math2code_math logs."""
+    for pat in [r'Observation\s*\d+\s*:', r'Action\s*\d+\s*:', r'Thought\s*\d+\s*:']:
+        s = re.sub(r'(?<!\n)(?=' + pat + r')', '\n', s)
+    return s
+
 
 def split_logs_by_task(text: str, num_tasks: int) -> List[List[str]]:
     """
@@ -538,6 +548,11 @@ def get_split_eval_idx_list(agent_dict: Dict[str, Any], n_folds: int) -> List[Li
     Returns:
         The split evaluation index list.
     """
+    # For eval-only runs (or when explicitly set), a single fold means "evaluate all tasks".
+    # The no-overlap invariant is trivially satisfied for 1 fold.
+    if n_folds <= 1:
+        return [list(range(len(agent_dict.get('tasks', []))))]
+
     eval_idx_list = [[] for _ in range(n_folds)]
     env_names = set(x['env_name'] for x in agent_dict['tasks'])
     task2idx = agent_dict['task2idx']
@@ -573,7 +588,9 @@ def get_split_eval_idx_list(agent_dict: Dict[str, Any], n_folds: int) -> List[Li
             eval_idx_list[j % n_folds].append(idx)
             j += 1
     
-    assert set.intersection(*[set(x) for x in eval_idx_list]) == set()
+    # Ensure there are no duplicates across folds.
+    flat = [i for fold in eval_idx_list for i in fold]
+    assert len(flat) == len(set(flat))
     
     return eval_idx_list
 

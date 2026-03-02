@@ -43,7 +43,7 @@ from memory import (
     RETRIEVERS,
 )
 from models import LLM_CLS
-from utils import save_trajectories_log, load_trajectories_log, plot_trial_stats, split_logs_by_task, alfworld_results_per_env_name, get_webshop_mean_scores, get_fewshot_max_tokens
+from utils import save_trajectories_log, load_trajectories_log, plot_trial_stats, split_logs_by_task, alfworld_results_per_env_name, get_webshop_mean_scores, get_fewshot_max_tokens, format_math2code_log
 from agent.reflect import Count
 
 @hydra.main(version_base=None, config_path="configs", config_name="train")
@@ -142,8 +142,15 @@ You are using the following language model: {react_agent.llm.model_name}
         ### Update & Save trajectory logs + dicts ###
         #############################################
         react_agent.update_stats()
-        log += prefix + react_agent.log_history() + '\n\n'
-        true_log += prefix + react_agent.log_history(include_all=True) + '\n\n'
+        # log += prefix + react_agent.log_history() + '\n\n'
+        # true_log += prefix + react_agent.log_history(include_all=True) + '\n\n'
+        hist = react_agent.log_history()
+        hist_all = react_agent.log_history(include_all=True)
+        if cfg.benchmark.name == 'math2code_math':
+            hist = format_math2code_log(hist)
+            hist_all = format_math2code_log(hist_all)
+        log += prefix + hist + '\n\n'
+        true_log += prefix + hist_all + '\n\n'
 
         # next task
         react_agent.next_task()

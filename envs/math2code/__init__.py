@@ -1,1 +1,2 @@
-from .math2code import Math2CodeEnv
+from .math2code_env import Math2CodeEnv
+

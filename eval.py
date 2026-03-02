@@ -57,7 +57,7 @@ def main(cfg : DictConfig) -> None:
         openai_api_key = os.environ['OPENAI_API_KEY'] if 'OPENAI_API_KEY' in os.environ else getpass.getpass("Enter or paste your OpenAI API Key: ")    
     LOG_PATH = Path('/'.join([cfg.log_dir, cfg.benchmark.name, cfg.agent_type]))
     SAVE_PATH = LOG_PATH / 'eval'
-    SAVE_PATH.mkdir(exist_ok=True)
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
     print(f"{SAVE_PATH}/{cfg.run_name}.pkl")
     
@@ -72,19 +72,46 @@ def main(cfg : DictConfig) -> None:
 
     # Load trajectory checkpoint (optional: load_log_path for cross-benchmark, e.g. insights from math2code_math)
     load_base = Path(cfg.load_log_path) if getattr(cfg, 'load_log_path', None) else (SAVE_PATH if cfg.resume else LOG_PATH)
+    # Convenience: allow load_run_name like "extracted_insights/run" without specifying load_log_path.
+    # In that case we interpret it as: load_base = LOG_PATH / "extracted_insights", run_name = "run".
+    load_run_name = cfg.load_run_name
+    if getattr(cfg, 'load_log_path', None) in [None, 'null'] and isinstance(load_run_name, str):
+        if ('/' in load_run_name) or ('\\' in load_run_name):
+            parts = load_run_name.replace('\\', '/').split('/')
+            if len(parts) >= 2:
+                load_base = load_base / '/'.join(parts[:-1])
+                load_run_name = parts[-1]
     out = load_trajectories_log(
         str(load_base),
-        run_name=cfg.load_run_name,
+        run_name=load_run_name,
         load_log=cfg.resume,
         load_true_log=cfg.resume)
     dicts = out['dicts']
-    eval_idx_list = dicts[-1].get(
-        'eval_idx_list',
-        get_split_eval_idx_list(dicts[-1], cfg.benchmark.eval_configs.k_folds))
+
+    # Build tasks for the current benchmark once.
+    tasks_now = INIT_TASKS_FN[cfg.benchmark.name](cfg)
+    num_tasks_now = len(tasks_now)
+
+    # Determine eval order. If the loaded checkpoint contains an incompatible eval_idx_list
+    # (e.g. from another benchmark or a different task set), fall back to a valid split.
+    def _default_eval_idx_list(n: int, k: int):
+        k = max(int(k), 1)
+        folds = [[] for _ in range(k)]
+        for i in range(n):
+            folds[i % k].append(i)
+        return folds
+
+    eval_idx_list = dicts[-1].get('eval_idx_list', None)
+    if (not isinstance(eval_idx_list, list)) or any((not isinstance(x, list)) for x in eval_idx_list):
+        eval_idx_list = _default_eval_idx_list(num_tasks_now, cfg.benchmark.eval_configs.k_folds)
+    else:
+        flat = [i for fold in eval_idx_list for i in fold]
+        if (len(flat) == 0) or (max(flat) >= num_tasks_now) or (min(flat) < 0):
+            eval_idx_list = _default_eval_idx_list(num_tasks_now, cfg.benchmark.eval_configs.k_folds)
     log = out['log'] if cfg.resume else f'### EVAL ORDER ###\n{eval_idx_list}\n'
     true_log = out['true_log'] if cfg.resume else f'### EVAL ORDER ###\n{eval_idx_list}\n{str(cfg)}\n'
 
-    num_training_tasks = len(INIT_TASKS_FN[cfg.benchmark.name](cfg))
+    num_training_tasks = num_tasks_now
 
     # we start at fold 0 if we are starting a new run
     starting_fold = dicts[-1].get('starting_fold', 0)
@@ -95,7 +122,7 @@ def main(cfg : DictConfig) -> None:
         name=cfg.ai_name,
         system_instruction=SYSTEM_INSTRUCTION[cfg.benchmark.name],
         human_instruction=HUMAN_INSTRUCTION[cfg.benchmark.name],
-        tasks=INIT_TASKS_FN[cfg.benchmark.name](cfg),
+        tasks=tasks_now,
         fewshots=FEWSHOTS[cfg.benchmark.name],
         system_prompt=system_message_prompt,
         env=ENVS[cfg.benchmark.name],

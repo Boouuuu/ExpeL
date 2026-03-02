@@ -48,10 +48,12 @@ def generate_one_completion(messages):
     messages = replace_invalid_roles(messages)
     # completion = client.chat.completions.create(
     completion = openai.ChatCompletion.create(
-        model="qwen-flash",  # 修正：模型名改为官方兼容版
+        model="glm-4.7",
         messages=messages,
-        temperature=0.7,  # 新增：可选，控制回复随机性
-        max_tokens=1024,   # 新增：可选，限制回复长度
+        extra_body={"enable_thinking": False},
+        stream=False,
+        temperature=0.2,  # 新增：可选，控制回复随机性
+        max_tokens=4096,   # 新增：可选，限制回复长度
         headers={
             "Authorization": f"Bearer {openai.api_key}",
             "Content-Type": "application/json"
@@ -68,7 +70,7 @@ class GPTWrapper:
         if long_ver:
             # llm_name = '3.5-turbo-16k'
             # llm_name = 'gpt-3.5-turbo'
-            llm_name = 'gpt-4o'
+            llm_name = 'gpt-3.5-turbo'
         self.llm = ChatOpenAI(
             model=llm_name,
             temperature=0.0,
@@ -82,8 +84,8 @@ class GPTWrapper:
         for i in range(6):
             try:
                 # output = self.llm(messages, **kwargs).content.strip('\n').strip()
-                # output = chatanywhere_llm(messages, self.openai_api_key)
-                output = generate_one_completion(messages)
+                output = chatanywhere_llm(messages, self.openai_api_key)
+                # output = generate_one_completion(messages)
                 if output == "":  # API调用失败
                     print(f'\nAPI call failed, retrying {i+1}/6...')
                     time.sleep(2)  # 等待2秒后重试

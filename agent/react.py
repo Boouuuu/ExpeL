@@ -53,6 +53,10 @@ class ReactAgent(BaseAgent):
         self.llm_parser = llm_parser
         self.observation_formatter = observation_formatter
         self._last_observation_history = None
+        if not hasattr(self, 'reflections'):
+            self.reflections = []
+        if not hasattr(self, 'format_reflections'):
+            self.format_reflections = lambda reflections, include_prefix=False: ''
 
         self.env = env(**self.tasks[self.task_idx]['env_kwargs'], max_steps=self.max_steps)
         self.env.reset()
@@ -235,6 +239,9 @@ class ReactAgent(BaseAgent):
         self.curr_step = 1
         self._build_agent_prompt()
 
+    def insert_before_task_prompt(self) -> None:
+        return
+
     def insert_after_task_prompt(self) -> None:
         return
 
@@ -296,7 +303,7 @@ class ReactAgent(BaseAgent):
 
         return new_prompt_history
 
-    def update_dynamic_prompt_components(self):
+    def update_dynamic_prompt_components(self, reset: bool = False):
         #####################
         # Updating fewshots #
         #####################

@@ -387,19 +387,21 @@ class ExpelAgent(ReflectAgent):
                             save_trajectories_log(path=logging_dir, log=all_logs, dicts=agent_dicts, run_name=run_name, save_true_log=False)
 
         # SUCCESS
-        if loaded_log is None or loaded_dict['critique_summary_section'] in ['compare']:
+        if loaded_log is None or (loaded_dict is not None and loaded_dict['critique_summary_section'] in ['compare']):
             all_logs += '\n\n################ SUCCESS CRITIQUES ################\n'
         else:
             all_logs = loaded_log
-        if loaded_dict is None or loaded_dict['critique_summary_section'] == 'compare':
-            for training_id in training_ids:
-                all_success = []
-                for idx, task in enumerate(self.succeeded_trial_history):
-                    if idx in training_ids and len(self.succeeded_trial_history[task]) > 0:
-                        all_success.append((task, self.succeeded_trial_history[task][0].trajectory))
-                all_success = random_divide_list(all_success, self.success_critique_num)
+        if loaded_dict is None or (loaded_dict is not None and loaded_dict['critique_summary_section'] == 'compare'):
+            all_success = []
+            # for training_id in training_ids:
+            #     for idx, task in enumerate(self.succeeded_trial_history):
+            for task in self.succeeded_trial_history:
+                idx = self.task2idx[task]
+                if idx in training_ids and len(self.succeeded_trial_history[task]) > 0:
+                    all_success.append((task, self.succeeded_trial_history[task][0].trajectory))
+            all_success = random_divide_list(all_success, self.success_critique_num)
         else:
-            all_success = loaded_dict['critique_summary_all_success']
+            all_success = loaded_dict.get('critique_summary_all_success', [])
         for success_chunk in all_success:
             if (loaded_dict is not None and loaded_dict['critique_summary_section'] == 'success' and \
                 loaded_dict['critique_summary_idx'] == success_chunk):
@@ -458,12 +460,18 @@ class ExpelAgent(ReflectAgent):
         combined_history = dict(self.succeeded_trial_history)
         if isinstance(self.all_fewshots, list):
             for fewshot in self.all_fewshots:
-                if self.benchmark_name in ['hotpotqa', 'fever']:
+                # Parse a fewshot into (task, trajectory). Different benchmarks format the "task header"
+                # slightly differently.
+                if self.benchmark_name in ['hotpotqa', 'fever', 'math2code', 'math2code_math']:
                     task = fewshot.split('\n')[0]
                     trajectory = '\n'.join(fewshot.split('\n')[1:])
                 elif self.benchmark_name == 'webshop':
                     task = '\n'.join(fewshot.split('\n')[:2])
                     trajectory = '\n'.join(fewshot.split('\n')[2:])
+                else:
+                    # Fallback: treat the first line as task header.
+                    task = fewshot.split('\n')[0]
+                    trajectory = '\n'.join(fewshot.split('\n')[1:])
                 cleaned_traj = Trajectory(
                     task=self.remove_task_suffix(task),
                     trajectory=trajectory,
@@ -561,6 +569,11 @@ class ExpelAgent(ReflectAgent):
             else:
                 filtered_subset_docs = subset_docs
 
+            # If nothing matches (e.g. no history/fewshots for this env), skip retrieval
+            # and keep the existing static fewshots instead of crashing FAISS.
+            if len(filtered_subset_docs) == 0:
+                return None
+
             return FAISS.from_documents(filtered_subset_docs, self.embedder)
 
         def topk_docs(queries: Dict[str, str], query_type: str):
@@ -605,7 +618,13 @@ class ExpelAgent(ReflectAgent):
             return fewshots
 
         self.setup_vectorstore()
-        self.vectorstore = filtered_vectorstore(self.fewshot_strategy if self.fewshot_strategy not in ['rotation', 'task_thought_similarity'] else 'task_similarity', docs=list(self.docs))
+        self.vectorstore = filtered_vectorstore(
+            self.fewshot_strategy if self.fewshot_strategy not in ['rotation', 'task_thought_similarity'] else 'task_similarity',
+            docs=list(self.docs),
+        )
+        if self.vectorstore is None:
+            # No available retrieval docs for this env; fall back to original fewshots.
+            return
 
         if self.prompt_history == []:
             queries = {'task': self.step_stripper(self.remove_task_suffix(self.task), step_type='task')}
