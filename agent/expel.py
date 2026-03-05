@@ -12,7 +12,7 @@ from scipy.spatial.distance import cosine
 
 from agent import ReflectAgent, ReactAgent
 from agent.reflect import Count
-from utils import random_divide_list, save_trajectories_log, get_env_name_from_task
+from utils import random_divide_list, save_trajectories_log, get_env_name_from_task, trace_prompt_history
 from memory import Trajectory
 
 from copy import deepcopy
@@ -319,6 +319,7 @@ class ExpelAgent(ReflectAgent):
     ) -> str:
         if load_cache_fold is not None:
             self.rules = '\n'.join([f'{i}. {item}' for i, item in enumerate(self.cache_rules.get(load_cache_fold, []), 1)])
+            print("\n=====================================\nLoaded rules:", self.rules)
             return
 
         def extend_rules(rule_items: List[str], success_history: str = None, fail_history: str = None, task: str = None, reflections: List[str] = None) -> List[str]:
@@ -434,6 +435,8 @@ class ExpelAgent(ReflectAgent):
         if self.training:
             return ReflectAgent.insert_before_task_prompt(self)
         # if eval, add the manual
+        # if self.benchmark_name in ['math2code','math2code_math']:
+            
         if not self.no_rules:
             # 使用dict格式
             rule_template = self.rule_template
@@ -447,6 +450,7 @@ class ExpelAgent(ReflectAgent):
                     'role': rule_template.get('role', 'human'),
                     'content': rule_template['content'].format(rules=self.rules)
                 })
+            trace_prompt_history(self.prompt_history, "ExpelAgent.insert_before_task_prompt: after append(rules)", getattr(self, "benchmark_name", None))
 
     def insert_after_task_prompt(self):
         pass
@@ -544,8 +548,18 @@ class ExpelAgent(ReflectAgent):
             return
         # do not dynamically update during training
         if self.training or self.fewshot_strategy == 'none':
+            if self.benchmark_name in ['math2code', 'math2code_math']:
+                print(f"[Fewshot Retrieval] SKIP dynamic update "
+                      f"(training={self.training}, strategy={self.fewshot_strategy})")
             return
-        old_fewshots = '\n\n'.join(self.fewshots)
+        # 记录旧的 fewshots 内容，方便对比更新前后的变化
+        old_fewshots_list = list(self.fewshots)
+        old_fewshots = '\n\n'.join(old_fewshots_list)
+        if self.benchmark_name in ['math2code', 'math2code_math']:
+            print("\n[Fewshot Before Update] num_fewshots =", len(old_fewshots_list))
+            for i, fs in enumerate(old_fewshots_list):
+                preview = fs[:240].replace('\n', ' ')
+                print(f"  - old[{i}] len={len(fs)} | {preview}{'...' if len(fs) > 240 else ''}")
 
         def filtered_vectorstore(fewshot_strategy: str, docs: List[Document]):
             strat2filter = {
@@ -572,11 +586,24 @@ class ExpelAgent(ReflectAgent):
             # If nothing matches (e.g. no history/fewshots for this env), skip retrieval
             # and keep the existing static fewshots instead of crashing FAISS.
             if len(filtered_subset_docs) == 0:
+                if self.benchmark_name in ['math2code', 'math2code_math']:
+                    print(f"[Fewshot VectorStore] EMPTY docs for env={self.env.env_name}, "
+                          f"strategy={fewshot_strategy}")
                 return None
 
-            return FAISS.from_documents(filtered_subset_docs, self.embedder)
+            vs = FAISS.from_documents(filtered_subset_docs, self.embedder)
+            # 在 math2code 等基准下，打印当前向量库中样本的统计信息，便于理解召回空间
+            if self.benchmark_name in ['math2code', 'math2code_math']:
+                print(f"[Fewshot VectorStore] strategy={fewshot_strategy}, env={self.env.env_name}, "
+                      f"total_docs={len(filtered_subset_docs)}")
+            return vs
 
         def topk_docs(queries: Dict[str, str], query_type: str):
+            # 在 math2code 等基准下，打印用于相似度检索的 query 内容
+            if self.benchmark_name in ['math2code', 'math2code_math']:
+                print("\n[Fewshot Retrieval] query_type:", query_type)
+                for k, v in queries.items():
+                    print(f"  - {k}: {v[:400]}{'...' if isinstance(v, str) and len(v) > 400 else ''}")
             # retrieve enough fewshots, filtering the ones that are too long
             fewshot_docs = self.vectorstore.similarity_search(queries[query_type], k=self.num_fewshots*self.buffer_retrieve_ratio)
             if self.fewshot_strategy == 'random':
@@ -600,6 +627,7 @@ class ExpelAgent(ReflectAgent):
                 fewshot_docs = sorted(subset_docs, key=lambda doc: cosine(self.embedder.embed_query(doc.page_content), self.embedder.embed_query(queries['task'])))
             else:
                 raise NotImplementedError
+            selected_any = False
             for fewshot_doc in fewshot_docs:
                 idx, shortest_fewshot = sorted(enumerate([traj.trajectory for traj in self.combined_history[fewshot_doc.metadata['task']]]), key=lambda x: len(x[1]))[0]
 
@@ -609,11 +637,24 @@ class ExpelAgent(ReflectAgent):
                 if self.token_counter(shortest_fewshot) > self.max_fewshot_tokens or \
                     self.task == fewshot_doc.metadata['task'] or fewshot_doc.metadata['task'] in current_tasks:
                     continue
-                fewshots.append(self.combined_history[fewshot_doc.metadata['task']][idx].task + '\n' + shortest_fewshot)
+                selected_traj = self.combined_history[fewshot_doc.metadata['task']][idx]
+                fewshots.append(selected_traj.task + '\n' + shortest_fewshot)
+                selected_any = True
+
+                # 在 math2code 等基准下，打印被选为 fewshot 的样本及其来源 task 信息
+                if self.benchmark_name in ['math2code', 'math2code_math']:
+                    print("[Fewshot Selected] from task:")
+                    print("  - task_header:", self.remove_task_suffix(selected_traj.task))
+                    preview = shortest_fewshot[:400]
+                    print("  - trajectory_preview:", preview + ("..." if len(shortest_fewshot) > 400 else ""))
 
                 current_tasks.add(fewshot_doc.metadata['task'])
                 if len(fewshots) == self.num_fewshots:
                     break
+
+            if (not selected_any) and self.benchmark_name in ['math2code', 'math2code_math']:
+                print(f"[Fewshot Selected] NONE selected after filtering for env={self.env.env_name}, "
+                      f"query_type={query_type}")
 
             return fewshots
 
@@ -651,7 +692,6 @@ class ExpelAgent(ReflectAgent):
                 'step': cleaned_step,
                 'action': self.step_stripper(trajectory.actions[-1], step_type='action') if len(trajectory.actions) > 1 else '',
             }
-
         if self.fewshot_strategy == 'random':
             self.vectorstore = filtered_vectorstore('random', docs=list(self.docs))
             self.fewshots = topk_docs(queries=queries, query_type='task')
@@ -703,8 +743,15 @@ class ExpelAgent(ReflectAgent):
                 self.fewshots = topk_docs(queries=queries, query_type='step')
         else:
             raise NotImplementedError
+
         # storing the new fewshots and replacing the current ones from prompt_history
-        new_fewshots = '\n\n'.join(self.fewshots)
+        new_fewshots_list = list(self.fewshots)
+        new_fewshots = '\n\n'.join(new_fewshots_list)
+        if self.benchmark_name in ['math2code', 'math2code_math']:
+            print("\n[Fewshot After Update] num_fewshots =", len(new_fewshots_list))
+            for i, fs in enumerate(new_fewshots_list):
+                preview = fs[:240].replace('\n', ' ')
+                print(f"  - new[{i}] len={len(fs)} | {preview}{'...' if len(fs) > 240 else ''}")
         replaced = False
         for i, history_message in enumerate(self.prompt_history):
             message_content = history_message['content'] if isinstance(history_message, dict) else history_message.content
@@ -719,6 +766,7 @@ class ExpelAgent(ReflectAgent):
                 break
         if not replaced and self.testing:
             self.prompt_history.append({'role': 'human', 'content': "WARNING. Fewshots haven't been replaced."})
+        trace_prompt_history(self.prompt_history, "ExpelAgent.update_dynamic_prompt_components: after fewshot replace/append", getattr(self, "benchmark_name", None))
 
 # Utils function
 def parse_rules(llm_text):

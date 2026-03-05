@@ -61,17 +61,25 @@ INIT_TASKS_FN = dict(
             'key': row['key'],
         },
         'env_name': 'math2code_math',
-    } for row in json.load(open(cfg.benchmark.task_file, "r"))],
+    } for row in json.load(open(cfg.benchmark.task_file, "r", encoding="utf-8"))],
     math2code=lambda cfg: [
+        # math2code now uses HumanEval-style data in JSONL format.
+        # Each line is a JSON object with at least: task_id, prompt,
+        # entry_point, canonical_solution, test.
         {
-        'task': f'{cfg.benchmark.task_prefix}{row["question"]}',
+        'task': f'{cfg.benchmark.task_prefix}{problem["prompt"]}',
         'env_kwargs': {
-            'question': row["question"],
-            'test_cases': row.get("test_cases", []),
-            'key': row.get("key", None),
+            # Pass the full HumanEval problem dict into the env so that it
+            # can evaluate Finish[code] using the official tests.
+            'problem': problem,
         },
         'env_name': 'math2code',
-    } for row in json.load(open(cfg.benchmark.task_file, "r"))],
+    }
+    for problem in (
+        json.loads(line)
+        for line in open(cfg.benchmark.task_file, "r", encoding="utf-8")
+        if line.strip()
+    )],
 )
 
 ENVS = dict(

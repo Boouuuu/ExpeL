@@ -37,7 +37,17 @@ from memory import (
     RETRIEVERS,
 )
 from models import LLM_CLS
-from utils import get_fewshot_max_tokens, load_trajectories_log, save_trajectories_log, split_logs_by_task, plot_trial_stats, alfworld_results_per_env_name_log, get_webshop_mean_score, get_split_eval_idx_list
+from utils import (
+    get_fewshot_max_tokens,
+    load_trajectories_log,
+    save_trajectories_log,
+    split_logs_by_task,
+    plot_trial_stats,
+    alfworld_results_per_env_name_log,
+    get_webshop_mean_score,
+    get_split_eval_idx_list,
+    recompute_stats,
+)
 
 
 def get_eval_num(eval_idx: int, eval_idx_list: List[List[int]]) -> int:
@@ -164,8 +174,24 @@ def main(cfg : DictConfig) -> None:
     )
 
     if len(dicts) > 0:
-        no_load_list = ['ai_message', 'message_type_format', 'max_num_rules', 'testing', 'human_critiques', 'system_critique_instructions', 'fewshot_strategy', 'success', 'halted', 'fail', 'task_idx', 'prompt_history', 'critique_truncate_strategy', 'success_critique_num', 'reflection_fewshots', 'reflection_system_prompt', 'reflection_prefix', 'reflection_prompt_history', 'reflections', 'previous_trial', 'perform_reflection', 'increment_task', 'reflection_system_kwargs', 'prepend_human_instruction', 'name', 'tasks', 'human_instruction_kwargs', 'all_system_instruction', 'all_fewshots', 'max_steps', 'ordered_summary', 'fewshots', 'system_instruction', 'num_fewshots', 'curr_step', 'log_idx', 'pretask_idx', 'reflect_interaction_idx', 'truncated', 'reward', 'terminated', 'autoregressive_model_instruction', 'failed_training_task_idx', '_train', 'task',
-        'eval_idx_list', 'starting_fold', 'starting_idx', 'rule_template', 'max_fewshot_tokens', 'buffer_retrieve_ratio']
+        # no_load_list = ['ai_name', 'ai_message', 'message_type_format', 'max_num_rules', 'testing', 'human_critiques', 'system_critique_instructions', 'fewshot_strategy', 'success', 'halted', 'fail', 'task_idx', 'prompt_history', 'critique_truncate_strategy', 'success_critique_num', 'reflection_fewshots', 'reflection_system_prompt', 'reflection_prefix', 'reflection_prompt_history', 'reflections', 'previous_trial', 'perform_reflection', 'increment_task', 'reflection_system_kwargs', 'prepend_human_instruction', 'name', 'tasks', 'human_instruction_kwargs', 'all_system_instruction', 'all_fewshots', 'max_steps', 'ordered_summary', 'fewshots', 'system_instruction', 'num_fewshots', 'curr_step', 'log_idx', 'pretask_idx', 'reflect_interaction_idx', 'truncated', 'reward', 'terminated', 'autoregressive_model_instruction', 'failed_training_task_idx', '_train', 'task',
+        # 'eval_idx_list', 'starting_fold', 'starting_idx', 'rule_template', 'max_fewshot_tokens', 'buffer_retrieve_ratio']
+
+        # 不从 checkpoint 覆盖以下字段，避免跨基准加载（例如从 math2code_math 的 insights）
+        # 破坏当前 eval 配置（如 benchmark_name、system_instruction 等）。
+        no_load_list = ['ai_name', 'ai_message', 'message_type_format', 'max_num_rules', 'testing',
+                        'human_critiques', 'system_critique_instructions', 'fewshot_strategy', 'success',
+                        'halted', 'fail', 'task_idx', 'prompt_history', 'critique_truncate_strategy',
+                        'success_critique_num', 'reflection_fewshots', 'reflection_system_prompt',
+                        'reflection_prefix', 'reflection_prompt_history', 'reflections', 'previous_trial',
+                        'perform_reflection', 'increment_task', 'reflection_system_kwargs',
+                        'prepend_human_instruction', 'name', 'tasks', 'human_instruction_kwargs',
+                        'all_system_instruction', 'all_fewshots', 'max_steps', 'ordered_summary', 'fewshots',
+                        'system_instruction', 'num_fewshots', 'curr_step', 'log_idx', 'pretask_idx',
+                        'reflect_interaction_idx', 'truncated', 'reward', 'terminated',
+                        'autoregressive_model_instruction', 'failed_training_task_idx', '_train', 'task',
+                        'eval_idx_list', 'starting_fold', 'starting_idx', 'rule_template', 'max_fewshot_tokens',
+                        'buffer_retrieve_ratio', 'benchmark_name']
         react_agent.load_checkpoint(dicts[-1], no_load_list=no_load_list)
         # resetting task_idx
         react_agent.task = react_agent.tasks[starting_idx]['task']
@@ -178,7 +204,7 @@ def main(cfg : DictConfig) -> None:
     react_agent.no_rules = cfg.no_rules
 
     print(f'*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n\nWe are using the following model: {react_agent.llm.model_name}\n\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
-    true_log += str(react_agent.llm.llm) + '\n'
+    # true_log += str(react_agent.llm.llm) + '\n'
     first_idxs = [eval_idxs[0] for eval_idxs in eval_idx_list]
 
     # start evaluating
@@ -242,7 +268,21 @@ def main(cfg : DictConfig) -> None:
     print(f'Finished. Success: {success}, Fail: {fail}, Halted: {halted}')
 
     parsed_result = split_logs_by_task(text=log, num_tasks=len(react_agent.tasks))
-    reflection_results = plot_trial_stats(parsed_result=parsed_result, benchmark=cfg.benchmark.name, max_trials=1, save_path=f"{LOG_PATH}/{cfg.run_name}_logs_stats.png")
+    reflection_results = plot_trial_stats(
+        parsed_result=parsed_result,
+        benchmark=cfg.benchmark.name,
+        max_trials=1,
+        save_path=f"{LOG_PATH}/{cfg.run_name}_logs_stats.png",
+    )
+
+    # When evaluating math2code (HumanEval-style code generation), report
+    # pass@1 as the primary metric. With one final program per task,
+    # pass@1 reduces to the fraction of tasks whose last attempt is CORRECT.
+    if cfg.benchmark.name == 'math2code':
+        stats = recompute_stats(parsed_result=parsed_result, benchmark=cfg.benchmark.name, trial=-1)
+        total = stats["success"] + stats["fail"] + stats["halted"]
+        pass_at_1 = (stats["success"] / total) if total > 0 else 0.0
+        reflection_results["pass@1"] = pass_at_1
 
     results = ', '.join([f"{k}: {v}" for k, v in reflection_results.items()]) + '\n'
     if cfg.benchmark.name == 'alfworld':

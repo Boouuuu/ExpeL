@@ -142,29 +142,95 @@ def print_message(message: Union[dict, ChatMessage], token_counter: Callable = N
     else:
         print(message_content)
 
+
+def trace_prompt_history(
+    prompt_history: List[dict],
+    label: str,
+    benchmark_name: str = None,
+    max_preview: int = 120,
+) -> None:
+    """
+    当 benchmark 为 math2code / math2code_math 时，将 prompt_history 的变化打印到控制台，
+    用于跟踪 eval 运行时 self.prompt_history 的演变。
+    """
+    if benchmark_name not in ('math2code', 'math2code_math'):
+        return
+    print(f"\n>>> [prompt_history] {label}")
+    print(f"    len(prompt_history) = {len(prompt_history)}")
+    for i, msg in enumerate(prompt_history):
+        role = msg.get('role', '?') if isinstance(msg, dict) else getattr(msg, 'type', '?')
+        content = msg.get('content', '') if isinstance(msg, dict) else getattr(msg, 'content', '')
+        n = len(content)
+        preview = (content[:max_preview] + '...') if n > max_preview else content
+        preview = preview.replace('\n', ' ')
+        print(f"    [{i}] role={role} len={n} | {preview}")
+    print("<<<\n")
+
+
+# 原代码
+# def parse_action(string: str):
+#     """
+#     Parse action string into action type and argument for HotpotQA and Fever.
+    
+#     Args:
+#         string: action string
+    
+#     Returns:
+#         action_type: action type
+#         argument: argument
+#     """
+#     # Support multiline arguments inside [...] (e.g., code blocks in Finish[...])
+#     # and allow empty arguments if the caller ever uses Action[].
+#     pattern = r'^(\w+)\[(.*)\]$'
+#     match = re.match(pattern, string, flags=re.DOTALL)
+    
+#     if match:
+#         action_type = match.group(1)
+#         argument = match.group(2)
+#         return action_type, argument
+    
+#     else:
+#         return None, None
 def parse_action(string: str):
     """
-    Parse action string into action type and argument for HotpotQA and Fever.
+    从包含 1 个或多个 action（如 Reason[]、Implement[]、Finish[]）的文本中，
+    提取最后一个 action 的类型和内容。匹配失败（无有效 action）时返回 (None, None)。
+    
+    特性：
+    - 适配单行/多行 action 内容（支持代码块、换行符、特殊字符）
+    - 适配文本中只有 1 个 action 或多个 action 的场景
+    - 自动清理提取内容的首尾空白
     
     Args:
-        string: action string
+        full_text: 待解析的完整文本（可包含任意前缀/后缀文本 + 1个/多个 action）
     
     Returns:
-        action_type: action type
-        argument: argument
+        last_action_type: 最后一个 action 的类型（如 Finish/Implement），无则返回 None
+        last_action_content: 最后一个 action 的内容（去掉外层 []），无则返回 None
     """
-    # Support multiline arguments inside [...] (e.g., code blocks in Finish[...])
-    # and allow empty arguments if the caller ever uses Action[].
-    pattern = r'^(\w+)\[(.*)\]$'
-    match = re.match(pattern, string, flags=re.DOTALL)
+    # 核心正则：匹配所有 动作名[内容] 格式的片段
+    # (\w+)          匹配 action 类型（字母/数字/下划线，如 Reason/Finish）
+    # \[             匹配左方括号
+    # ([\s\S]*?)     非贪婪匹配括号内所有内容（包括换行、代码块、特殊字符）
+    # \]             匹配右方括号
+    # (?=\w+\[|$)    正向预查：确保匹配到下一个 action 开头或文本结尾
+    pattern = r'(\w+)\[([\s\S]*?)\](?=\w+\[|$)'
     
-    if match:
-        action_type = match.group(1)
-        argument = match.group(2)
-        return action_type, argument
+    # 提取所有匹配的 action 列表
+    matches = re.findall(pattern, string)
     
-    else:
+    # 无匹配结果时返回 (None, None)
+    if not matches:
         return None, None
+    
+    # 取最后一个匹配项，清理首尾空白后返回
+    last_type, last_content = matches[-1]
+    return last_type.strip(), last_content.strip()
+
+test_str="""
+
+"""
+
 
 def normalize_answer(s: str):
     """

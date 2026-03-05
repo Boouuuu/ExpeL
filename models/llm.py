@@ -43,12 +43,14 @@ def replace_invalid_roles(messages):
     
     return processed_messages
 def generate_one_completion(messages):
-    openai.api_key = "sk-a3b1a801d70747a0b7d3b2797a14ab05"
+    # jiajia
+    # openai.api_key = "sk-a3b1a801d70747a0b7d3b2797a14ab05"
+    openai.api_key = "sk-afa113e744a345899ad27f3452c08ffa"
     openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     messages = replace_invalid_roles(messages)
     # completion = client.chat.completions.create(
     completion = openai.ChatCompletion.create(
-        model="glm-4.7",
+        model="glm-4.6",
         messages=messages,
         extra_body={"enable_thinking": False},
         stream=False,
@@ -84,8 +86,8 @@ class GPTWrapper:
         for i in range(6):
             try:
                 # output = self.llm(messages, **kwargs).content.strip('\n').strip()
-                output = chatanywhere_llm(messages, self.openai_api_key)
-                # output = generate_one_completion(messages)
+                # output = chatanywhere_llm(messages, self.openai_api_key)
+                output = generate_one_completion(messages)
                 if output == "":  # API调用失败
                     print(f'\nAPI call failed, retrying {i+1}/6...')
                     time.sleep(2)  # 等待2秒后重试

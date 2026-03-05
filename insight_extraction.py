@@ -9,7 +9,7 @@ import random
 # 设置代理（如果需要访问维基百科）
 try:
     from setup_proxy import setup_proxy
-    setup_proxy()
+    # setup_proxy()
 except Exception as e:
     print(f"Warning: Failed to setup proxy: {e}")
 

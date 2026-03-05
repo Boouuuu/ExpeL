@@ -12,8 +12,7 @@ from prompts.templates.human import (
     human_instruction_fewshot_message_prompt,
     human_task_message_prompt,
 )
-from utils import print_message, token_counter
-
+from utils import print_message, token_counter, trace_prompt_history
 class ReactAgent(BaseAgent):
     """
     A Generic ReAct Agent.
@@ -75,7 +74,8 @@ class ReactAgent(BaseAgent):
         # build base prompt
         self._build_agent_prompt()
         self.update_dynamic_prompt_components()
-        
+        trace_prompt_history(self.prompt_history, "ReactAgent.__init__: after _build_agent_prompt + update_dynamic", getattr(self, "benchmark_name", None))
+
         self.long_pass = None
 
     def is_success(self) -> bool:
@@ -95,6 +95,7 @@ class ReactAgent(BaseAgent):
     def step(self) -> None:
         message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, False)
         self.prompt_history.append(message)
+        trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after append(ai message)", getattr(self, "benchmark_name", None))
         self.print_message(message)
 
         thought_num = 1
@@ -103,6 +104,7 @@ class ReactAgent(BaseAgent):
             thought_num += 1
             message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, False)
             self.prompt_history.append(message)
+            trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after append(thought)", getattr(self, "benchmark_name", None))
             self.print_message(message)
 
             if thought_num > 2:
@@ -122,12 +124,14 @@ class ReactAgent(BaseAgent):
                 if self._last_observation_history['content'] in message['content']:
                     message['content'] = message['content'].replace(self._last_observation_history['content'], observation_history['content'])
                     break
-            self._last_observation_history = deepcopy(observation_history)        
+            self._last_observation_history = deepcopy(observation_history)
+        trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after observation", getattr(self, "benchmark_name", None))
         self.print_message(observation_history)
 
         self.after_step()
 
         self.prompt_history = self.collapse_prompts(self.prompt_history)
+        trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after collapse_prompts", getattr(self, "benchmark_name", None))
 
         self.curr_step += 1
 
@@ -136,9 +140,19 @@ class ReactAgent(BaseAgent):
         pass
 
     def prompt_agent(self) -> str:
+        # 这里已经错误成math了
         self.prompt_history = self.collapse_prompts(self.prompt_history)
         self.update_dynamic_prompt_components()
         prompt_history = self.collapse_prompts(self.prompt_history)
+        trace_prompt_history(prompt_history, f"ReactAgent.prompt_agent(step={self.curr_step}): before LLM call", getattr(self, "benchmark_name", None))
+        # 在 math2code 等代码生成基准下，将当前构造好的完整 prompt 打印到控制台，便于调试
+        if getattr(self, "benchmark_name", None) in ["math2code", "math2code_math"]:
+            print("\n================ LLM PROMPT (step {}) ================".format(self.curr_step))
+            for msg in prompt_history:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                print(f"[{role}]\n{content}\n")
+            print("================ END LLM PROMPT ======================\n")
         if self.testing:
             print('###################################')
             for prompt in prompt_history:
@@ -191,14 +205,12 @@ class ReactAgent(BaseAgent):
             final_message_content = base_message_dict["content"].format(
                 instruction=complete_instruction,
                 fewshots=complete_fewshots
-            )
-            
+            )            
             # 步骤5：构建最终消息字典（更新content为填充后的完整内容）
             final_message_dict = {
                 "role": base_message_dict["role"],
                 "content": final_message_content
             }
-            
             # 步骤6：添加到历史列表（与原逻辑一致）
             prompt_history.append(final_message_dict)
 
@@ -206,9 +218,7 @@ class ReactAgent(BaseAgent):
         # system_prompt = self.system_prompt.format_messages(
         #     instruction=self.system_instruction, ai_name=self.name
         # )
-        self.system_prompt["content"] = self.system_prompt["content"].format(
-            instruction=self.system_instruction, ai_name=self.name
-        )
+        self.system_prompt["content"] = self.system_instruction
         system_prompt = self.system_prompt
         self.prompt_history.append(system_prompt)
         self._build_fewshot_prompt(
@@ -220,6 +230,7 @@ class ReactAgent(BaseAgent):
         self.prompt_history = self.collapse_prompts(self.prompt_history)
         self.log_idx = len(self.prompt_history)
         self.insert_before_task_prompt()
+        print("更新后的self.prompt_history:", self.prompt_history)
 
         # 使用dict格式代替ChatMessage
         from prompts.templates.human import human_task_message_prompt
@@ -231,13 +242,16 @@ class ReactAgent(BaseAgent):
         self.insert_after_task_prompt()
         self.prompt_history = self.collapse_prompts(self.prompt_history)
         self.pretask_idx = len(self.prompt_history)
+        trace_prompt_history(self.prompt_history, "ReactAgent._build_agent_prompt: end", getattr(self, "benchmark_name", None))
         return self.prompt_history
 
     def reset(self, *args, **kwargs) -> None:
         self.prompt_history = []
+        trace_prompt_history(self.prompt_history, "ReactAgent.reset: after clear", getattr(self, "benchmark_name", None))
         self.update_dynamic_prompt_components(reset=True)
         self.curr_step = 1
         self._build_agent_prompt()
+        trace_prompt_history(self.prompt_history, "ReactAgent.reset: after _build_agent_prompt", getattr(self, "benchmark_name", None))
 
     def insert_before_task_prompt(self) -> None:
         return
@@ -311,7 +325,6 @@ class ReactAgent(BaseAgent):
             self.fewshots = self.all_fewshots[self.env.env_name]
         elif isinstance(self.all_fewshots, list):
             self.fewshots = self.all_fewshots
-
         #########################
         # Updating instructions #
         #########################
