@@ -9,7 +9,7 @@ from .fever.fever import FeverEnv
 from .alfworld.alfworld import AlfworldEnv
 from .webshop.webshop import WebshopEnv
 from .math2code_math.math_train_env import MathTrainEnv
-from .math2code.math2code_env import Math2CodeEnv
+from .code2math_code.code_train_env import CodeTrainEnv
 from utils import get_env_name_from_gamefile
 
 # Taken from ReAct Github
@@ -80,6 +80,19 @@ INIT_TASKS_FN = dict(
         for line in open(cfg.benchmark.task_file, "r", encoding="utf-8")
         if line.strip()
     )],
+    code2math_code=lambda cfg: [
+        {
+        'task': f'{cfg.benchmark.task_prefix}{problem["prompt"]}',
+        'env_kwargs': {
+            'problem': problem,
+        },
+        'env_name': 'code2math_code',
+    }
+    for problem in (
+        json.loads(line)
+        for line in open(cfg.benchmark.task_file, "r", encoding="utf-8")
+        if line.strip()
+    )],
 )
 
 ENVS = dict(
@@ -88,5 +101,5 @@ ENVS = dict(
     alfworld=AlfworldEnv,
     webshop=WebshopEnv,
     math2code_math=MathTrainEnv,
-    math2code=Math2CodeEnv,
+    code2math_code=CodeTrainEnv,
 )

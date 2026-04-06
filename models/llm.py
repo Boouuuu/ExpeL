@@ -42,28 +42,90 @@ def replace_invalid_roles(messages):
                 msg["role"] = role_mapping[msg["role"]]
     
     return processed_messages
+# def generate_one_completion(messages):
+#     # jiajia
+#     # openai.api_key = "sk-a3b1a801d70747a0b7d3b2797a14ab05"
+#     openai.api_key = "sk-afa113e744a345899ad27f3452c08ffa"
+#     openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+#     messages = replace_invalid_roles(messages)
+#     # completion = client.chat.completions.create(
+#     completion = openai.ChatCompletion.create(
+#         model="glm-4.6",
+#         messages=messages,
+#         extra_body={"enable_thinking": False},
+#         stream=False,
+#         temperature=0.2,  # 新增：可选，控制回复随机性
+#         max_tokens=4096,   # 新增：可选，限制回复长度
+#         headers={
+#             "Authorization": f"Bearer {openai.api_key}",
+#             "Content-Type": "application/json"
+#         }
+#     )
+#     # print(f"\n🔹 Generating for task: {task_id}")
+#     # 修正：直接取属性，而非转JSON字符串（更高效）
+#     return completion.choices[0].message.content
+
+import requests
+import json
 def generate_one_completion(messages):
-    # jiajia
-    # openai.api_key = "sk-a3b1a801d70747a0b7d3b2797a14ab05"
-    openai.api_key = "sk-afa113e744a345899ad27f3452c08ffa"
-    openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     messages = replace_invalid_roles(messages)
-    # completion = client.chat.completions.create(
-    completion = openai.ChatCompletion.create(
-        model="glm-4.6",
-        messages=messages,
-        extra_body={"enable_thinking": False},
-        stream=False,
-        temperature=0.2,  # 新增：可选，控制回复随机性
-        max_tokens=4096,   # 新增：可选，限制回复长度
-        headers={
-            "Authorization": f"Bearer {openai.api_key}",
-            "Content-Type": "application/json"
-        }
-    )
-    # print(f"\n🔹 Generating for task: {task_id}")
-    # 修正：直接取属性，而非转JSON字符串（更高效）
-    return completion.choices[0].message.content
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    payload = {
+        "model": "glm-4.7",
+        "messages": messages,
+        "stream": False,
+        "temperature": 0.1,
+        "thinking": { "type": "disabled" },
+        "response_format": { "type": "text" },
+        "stop":["Observation"]
+    }
+    headers = {
+        "Authorization": "Bearer a334a4e40f6546b78da54035bae0bf67.2zsc9HHOZg7RVAQN",
+        "Content-Type": "application/json"
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()  # 捕获HTTP请求错误
+    try:
+        # 尝试正常打印
+        print("llm response:", response.text)
+    except UnicodeEncodeError:
+        # 编码失败时，替换无法编码的字符（或忽略）
+        print("llm response:", response.text.encode('utf-8', errors='replace').decode('utf-8'))
+    # 第一步:解析LLM返回的顶层JSON
+    llm_response = json.loads(response.text)
+    # 提取content字段(此时是JSON字符串)
+    content_json_str = llm_response["choices"][0]["message"]["content"]
+    try:
+        content_data = json.loads(content_json_str)
+        # 核心:适配content_data为列表的情况(如 [[0], {xxx:xxx, answer:xxx}])
+        if isinstance(content_data, list):
+            # 遍历列表中的每个元素,找包含answer的字典
+            answer = None
+            for item in content_data:
+                if isinstance(item, dict) and "answer" in item:
+                    answer = item.get("answer")
+                    break
+            # 若列表中没找到answer,返回原字符串兜底
+            if answer is None:
+                answer = content_json_str
+        
+        # 兼容content_data为字典的情况
+        elif isinstance(content_data, dict):
+            answer = content_data.get("answer", content_json_str)
+        
+        # 其他类型(如字符串/数字)直接返回
+        else:
+            answer = content_json_str
+        return answer.strip() if answer else ""       
+
+    except json.JSONDecodeError:
+        # 如果content不是有效JSON,直接返回原字符串
+        answer = content_json_str
+        return answer.strip() if answer else ""       
+    
+    except requests.exceptions.RequestException as e:
+        print(f"请求错误:{e}")
+        return ""
 
 class GPTWrapper:
     def __init__(self, llm_name: str, openai_api_key: str, long_ver: bool):

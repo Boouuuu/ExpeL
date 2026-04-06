@@ -242,8 +242,9 @@ class ExpelAgent(ReflectAgent):
             human_format_dict['success_history'] = success_history
         if reflections is not None:
             human_format_dict['reflections_list'] = '- ' + '\n- '.join(reflections)
-        if existing_rules is not None:
-            human_format_dict['existing_rules'] = '\n'.join([f'{i}. {r}' for i, r in enumerate(existing_rules, 1)])
+        # 以免上下文过长，消除edit
+        # if existing_rules is not None:
+        #     human_format_dict['existing_rules'] = '\n'.join([f'{i}. {r}' for i, r in enumerate(existing_rules, 1)])
         # 使用dict格式
         human_critique_template = self.human_critiques[critique_type]
         if hasattr(human_critique_template, 'format_messages'):

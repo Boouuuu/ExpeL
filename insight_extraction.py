@@ -5,13 +5,16 @@ from pathlib import Path
 from functools import partial
 import os
 import random
-
+# 放在 Python 文件 最顶部
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # 设置代理（如果需要访问维基百科）
-try:
-    from setup_proxy import setup_proxy
-    # setup_proxy()
-except Exception as e:
-    print(f"Warning: Failed to setup proxy: {e}")
+# try:
+#     from setup_proxy import setup_proxy
+#     setup_proxy()
+# except Exception as e:
+#     print(f"Warning: Failed to setup proxy: {e}")
 
 from agent import AGENT
 from langchain.chat_models import ChatOpenAI
@@ -125,8 +128,12 @@ def main(cfg : DictConfig) -> None:
     )
 
     print(f'Loading agent from {LOG_PATH}')
-    no_load_list = ['ai_message', 'message_type_format', 'max_num_rules', 'testing', 'human_critiques', 'system_critique_instructions', 'fewshot_strategy', 'success', 'halted', 'fail', 'task_idx', 'prompt_history', 'critique_truncate_strategy', 'success_critique_num', 'reflection_fewshots', 'reflection_system_prompt', 'reflection_prefix', 'reflection_prompt_history', 'reflections', 'previous_trial', 'perform_reflection', 'increment_task', 'reflection_system_kwargs', 'prepend_human_instruction', 'name', 'tasks', 'human_instruction_kwargs', 'all_system_instruction', 'all_fewshots', 'max_steps', 'ordered_summary', 'fewshots', 'system_instruction', 'num_fewshots', 'curr_step', 'log_idx', 'pretask_idx', 'reflect_interaction_idx', 'truncated', 'reward', 'terminated', 'autoqregressive_model_instruction', 'failed_training_task_idx', '_train', 'task', 'eval_idx_list', 'starting_fold', 'starting_idx', 'critique_summary_suffix']
+    # tasks / idx2task / task2idx 必须与当前 cfg 下的 INIT_TASKS_FN 一致；checkpoint 里存的是训练当时的索引表，
+    # 若训练子集更小（例如只跑了前 41 条），恢复后会缺键导致 create_rules 里 KeyError。
+    no_load_list = ['ai_message', 'message_type_format', 'max_num_rules', 'testing', 'human_critiques', 'system_critique_instructions', 'fewshot_strategy', 'success', 'halted', 'fail', 'task_idx', 'prompt_history', 'critique_truncate_strategy', 'success_critique_num', 'reflection_fewshots', 'reflection_system_prompt', 'reflection_prefix', 'reflection_prompt_history', 'reflections', 'previous_trial', 'perform_reflection', 'increment_task', 'reflection_system_kwargs', 'prepend_human_instruction', 'name', 'tasks', 'idx2task', 'task2idx', 'human_instruction_kwargs', 'all_system_instruction', 'all_fewshots', 'max_steps', 'ordered_summary', 'fewshots', 'system_instruction', 'num_fewshots', 'curr_step', 'log_idx', 'pretask_idx', 'reflect_interaction_idx', 'truncated', 'reward', 'terminated', 'autoqregressive_model_instruction', 'failed_training_task_idx', '_train', 'task', 'eval_idx_list', 'starting_fold', 'starting_idx', 'critique_summary_suffix']
     react_agent.load_checkpoint(dicts[-1], no_load_list=no_load_list)
+    react_agent.idx2task = {idx: t['task'] for idx, t in enumerate(react_agent.tasks)}
+    react_agent.task2idx = {t['task']: idx for idx, t in enumerate(react_agent.tasks)}
 
     random.seed(cfg.seed)
     num_training_tasks = len(INIT_TASKS_FN[cfg.benchmark.name](cfg))

@@ -23,39 +23,40 @@ Action 3: Calculate[60 * 2]
 Observation 3: Result: 120
 Thought 4: The process ends when all factors are applied.
 Action 4: Finish[120]""",
-"""Question: Find gcd(48, 18) using the Euclidean algorithm.
-Thought 1: This problem can be solved by repeatedly reducing the problem size using the same rule until a stopping condition is met.
-Action 1: Reason[48 mod 18 = 12, so gcd(48,18) becomes gcd(18,12)]
-Observation 1: OK.
-Thought 2: Apply the same reduction rule again.
-Action 2: Reason[18 mod 12 = 6, so gcd(18,12) becomes gcd(12,6)]
-Observation 2: OK.
-Thought 3: When the remainder is zero, the process stops.
-Action 3: Reason[12 mod 6 = 0, so gcd(12,6) = 6]
-Observation 3: OK.
-Thought 4: The algorithm terminates here.
-Action 4: Finish[6]""",
-"""Question: Solve the quadratic equation x² - 5x + 6 = 0.
-Thought 1: This equation can be solved by factoring, which leads to checking multiple solution branches.
-Action 1: Reason[Factor the equation: (x-2)(x-3)=0, so x=2 or x=3]
-Observation 1: OK.
-Thought 2: Both branches are valid solutions.
-Action 2: Finish[2, 3]""",
-"""Question: What is the sum of the first 10 positive integers?
-Thought 1: This problem matches a known closed-form formula, which avoids iterative computation.
-Action 1: Reason[Use the formula n(n+1)/2 with n=10]
-Observation 1: OK.
-Thought 2: Compute the formula result.
-Action 2: Calculate[10 * 11 / 2]
-Observation 2: Result: 55.0
-Thought 3: The computation is complete.
-Action 3: Finish[55]""",
-"""Question: Is 17 a prime number?
-Thought 1: A prime check requires testing divisibility up to a stopping bound.
-Action 1: Reason[Test divisors from 2 to sqrt(17): 2, 3, 4]
-Observation 1: OK.
-Thought 2: No divisor divides 17, so the condition holds.
-Action 2: Finish[yes]"""]
+# """Question: Find gcd(48, 18) using the Euclidean algorithm.
+# Thought 1: This problem can be solved by repeatedly reducing the problem size using the same rule until a stopping condition is met.
+# Action 1: Reason[48 mod 18 = 12, so gcd(48,18) becomes gcd(18,12)]
+# Observation 1: OK.
+# Thought 2: Apply the same reduction rule again.
+# Action 2: Reason[18 mod 12 = 6, so gcd(18,12) becomes gcd(12,6)]
+# Observation 2: OK.
+# Thought 3: When the remainder is zero, the process stops.
+# Action 3: Reason[12 mod 6 = 0, so gcd(12,6) = 6]
+# Observation 3: OK.
+# Thought 4: The algorithm terminates here.
+# Action 4: Finish[6]""",
+# """Question: Solve the quadratic equation x² - 5x + 6 = 0.
+# Thought 1: This equation can be solved by factoring, which leads to checking multiple solution branches.
+# Action 1: Reason[Factor the equation: (x-2)(x-3)=0, so x=2 or x=3]
+# Observation 1: OK.
+# Thought 2: Both branches are valid solutions.
+# Action 2: Finish[2, 3]""",
+# """Question: What is the sum of the first 10 positive integers?
+# Thought 1: This problem matches a known closed-form formula, which avoids iterative computation.
+# Action 1: Reason[Use the formula n(n+1)/2 with n=10]
+# Observation 1: OK.
+# Thought 2: Compute the formula result.
+# Action 2: Calculate[10 * 11 / 2]
+# Observation 2: Result: 55.0
+# Thought 3: The computation is complete.
+# Action 3: Finish[55]""",
+# """Question: Is 17 a prime number?
+# Thought 1: A prime check requires testing divisibility up to a stopping bound.
+# Action 1: Reason[Test divisors from 2 to sqrt(17): 2, 3, 4]
+# Observation 1: OK.
+# Thought 2: No divisor divides 17, so the condition holds.
+# Action 2: Finish[yes]"""
+]
 
 REFLECTION_FEWSHOTS = [
 """

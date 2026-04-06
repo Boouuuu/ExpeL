@@ -13,6 +13,10 @@ from prompts import FEWSHOTS
 import math
 import pickle
 import re
+# 放在 Python 文件 最顶部
+import sys
+import io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 
 ENV_NAMES = [
@@ -153,7 +157,7 @@ def trace_prompt_history(
     当 benchmark 为 math2code / math2code_math 时，将 prompt_history 的变化打印到控制台，
     用于跟踪 eval 运行时 self.prompt_history 的演变。
     """
-    if benchmark_name not in ('math2code', 'math2code_math'):
+    if benchmark_name not in ('math2code_math', 'code2math_code'):
         return
     print(f"\n>>> [prompt_history] {label}")
     print(f"    len(prompt_history) = {len(prompt_history)}")
@@ -191,33 +195,54 @@ def trace_prompt_history(
     
 #     else:
 #         return None, None
-def parse_action(string: str):
+import re
+
+def parse_action2(string: str):
     """
-    从包含 1 个或多个 action（如 Reason[]、Implement[]、Finish[]）的文本中，
+    从包含 1 个或多个 action（包括 Reason[]、Implement[]、Finish[]等）的文本中,
     提取最后一个 action 的类型和内容。匹配失败（无有效 action）时返回 (None, None)。
     
-    特性：
+    特性:
     - 适配单行/多行 action 内容（支持代码块、换行符、特殊字符）
     - 适配文本中只有 1 个 action 或多个 action 的场景
+    - 支持括号嵌套（如 Calculate[13 + 9 - 20 + 3]）
     - 自动清理提取内容的首尾空白
     
     Args:
-        full_text: 待解析的完整文本（可包含任意前缀/后缀文本 + 1个/多个 action）
+        string: 待解析的完整文本（可包含任意前缀/后缀文本 + 1个/多个 action）
     
     Returns:
         last_action_type: 最后一个 action 的类型（如 Finish/Implement），无则返回 None
         last_action_content: 最后一个 action 的内容（去掉外层 []），无则返回 None
     """
-    # 核心正则：匹配所有 动作名[内容] 格式的片段
-    # (\w+)          匹配 action 类型（字母/数字/下划线，如 Reason/Finish）
-    # \[             匹配左方括号
-    # ([\s\S]*?)     非贪婪匹配括号内所有内容（包括换行、代码块、特殊字符）
-    # \]             匹配右方括号
-    # (?=\w+\[|$)    正向预查：确保匹配到下一个 action 开头或文本结尾
-    pattern = r'(\w+)\[([\s\S]*?)\](?=\w+\[|$)'
     
-    # 提取所有匹配的 action 列表
-    matches = re.findall(pattern, string)
+    # 匹配 action 类型（字母开头的单词）后跟方括号
+    # 使用递归或栈来处理嵌套括号
+    
+    # 首先找到所有可能的 action 起始位置
+    action_pattern = r'([A-Z][a-zA-Z]*)\['
+    
+    matches = []
+    
+    for match in re.finditer(action_pattern, string):
+        action_type = match.group(1)
+        start_pos = match.end()  # '[' 之后的位置
+        
+        # 使用栈来匹配嵌套括号
+        bracket_count = 1
+        pos = start_pos
+        
+        while pos < len(string) and bracket_count > 0:
+            if string[pos] == '[':
+                bracket_count += 1
+            elif string[pos] == ']':
+                bracket_count -= 1
+            pos += 1
+        
+        # 如果括号匹配成功
+        if bracket_count == 0:
+            content = string[start_pos:pos-1]  # 提取括号内的内容（不含最后的']'）
+            matches.append((action_type, content))
     
     # 无匹配结果时返回 (None, None)
     if not matches:
@@ -227,10 +252,87 @@ def parse_action(string: str):
     last_type, last_content = matches[-1]
     return last_type.strip(), last_content.strip()
 
-test_str="""
 
+# 测试
+test_str = """
+Action 1: Thought 1: We can approach this problem using the principle of inclusion-exclusion to find the number of boxes containing both pens and pencils by considering the number of boxes containing pencils, pens, neither, and the total number of boxes. Let's calculate the number of boxes containing both pens and pencils using the formula: \( B_{\text{both}} = P + N - B + B_{\text{neither}} \), where \( P = 13 \) (boxes containing pencils), \( N = 9 \) (boxes containing pens), \( B = 20 \) (total number of boxes), and \( B_{\text{neither}} = 3 \) (boxes containing neither).
+Calculate[13 + 9 - 20 + 3]Observation 1: Result: 5
+Finish[5]
 """
 
+result = parse_action2(test_str)
+# print(result)  # 应该输出: ('Finish', '5')
+import re
+
+def parse_action(text: str):
+    """
+    专门解析 LLM 输出中的 Action（仅支持 Test / Finish）
+
+    支持：
+    - 多行代码
+    - 嵌套括号
+    - 忽略 List[...] / typing[...] 等干扰
+
+    返回：
+        (action_type, content) 或 (None, None)
+    """
+
+    ACTION_TYPES = ("Test", "Finish")
+    matches = []
+
+    i = 0
+    n = len(text)
+
+    while i < n:
+        # 检查是否匹配某个 Action 类型
+        for action in ACTION_TYPES:
+            prefix = action + "["
+            if text.startswith(prefix, i):
+                start = i + len(prefix)
+
+                # 栈匹配括号
+                bracket_count = 1
+                j = start
+
+                while j < n and bracket_count > 0:
+                    if text[j] == '[':
+                        bracket_count += 1
+                    elif text[j] == ']':
+                        bracket_count -= 1
+                    j += 1
+
+                if bracket_count == 0:
+                    content = text[start:j-1]
+                    matches.append((action, content.strip()))
+                    i = j  # 跳到匹配结束
+                    break
+        else:
+            i += 1  # 没匹配到任何 action，继续
+
+    if not matches:
+        return None, None
+
+    return matches[-1]
+
+test_str = """
+Action 1: Thought 1: ... Test[from typing import List
+def has_close_elements(numbers: List[float], threshold: float) -> bool:
+    n = len(numbers)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(numbers[i] - numbers[j]) < threshold:
+                return True
+    return False
+assert has_close_elements([1.0, 2.0, 3.0], 0.5) == False
+assert has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) == True
+assert has_close_elements([], 0.5) == False
+assert has_close_elements([1.0], 0.5) == False
+]
+"""
+action_type, content = parse_action(test_str)
+
+# print(action_type)
+# print(content)
 
 def normalize_answer(s: str):
     """
@@ -378,10 +480,10 @@ def recompute_stats(parsed_result: List[List[str]], benchmark: str, trial: int =
         last_trajectory = trajectories[min(trial, len(trajectories) - 1)].strip()
         last_step = last_trajectory.split('\n')[-1]
 
-        if benchmark in ['hotpotqa', 'math2code', 'math2code_math']:
-            if ' CORRECT' in last_step:
+        if benchmark in ['hotpotqa', 'math2code_math', 'code2math_code']:
+            if ' CORRECT' in last_step or 'Answer is correct.' in last_step:
                 stats["success"] += 1
-            elif 'INCORRECT' in last_step:
+            elif 'INCORRECT' in last_step or 'Answer is incorrect.' in last_step:
                 stats["fail"] += 1
             else:
                 stats["halted"] += 1
@@ -703,7 +805,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             invalid = 'nothing happens'
         elif benchmark == 'webshop':
             invalid = 'invalid action' 
-        elif benchmark in ['hotpotqa', 'fever', 'math2code', 'math2code_math']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
             invalid = 'invalid action'
         mode += 'observation'
 
@@ -712,7 +814,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             lambda_filter = lambda y: y.strip().startswith('Action: think[')
         elif benchmark == 'alfworld':
             lambda_filter = lambda y: y.strip().startswith('> think:')
-        elif benchmark in ['hotpotqa', 'fever', 'math2code', 'math2code_math']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
             lambda_filter = lambda y: y.strip().startswith('Thought')
         else:
             raise NotImplementedError(f'benchmark {benchmark} not implemented')
@@ -721,7 +823,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             lambda_filter = lambda y: y.strip().startswith('Action: click[') or y.strip().startswith('Action: search[') # valid actions
         elif benchmark == 'alfworld':
             lambda_filter = lambda y: y.strip().startswith('> ') and not y.strip().startswith('> think:') # valid and invalid actions
-        elif benchmark in ['hotpotqa', 'fever', 'math2code', 'math2code_math']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
             lambda_filter = lambda y: y.strip().startswith('Action')
         else:
             raise NotImplementedError(f'benchmark {benchmark} not implemented')
@@ -730,7 +832,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             lambda_filter = lambda y: y.strip().startswith('Observation:')
         elif benchmark == 'alfworld':
             lambda_filter = lambda y: not y.strip().startswith('> ')
-        elif benchmark in ['hotpotqa', 'fever', 'math2code', 'math2code_math']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
             lambda_filter = lambda y: y.strip().startswith('Observation')
         else:
             raise NotImplementedError(f'benchmark {benchmark} not implemented')

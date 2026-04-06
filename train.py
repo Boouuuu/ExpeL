@@ -7,13 +7,14 @@ from copy import deepcopy
 from functools import partial
 import dotenv
 dotenv.load_dotenv()
-
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
 # 设置代理（如果需要访问维基百科）
-try:
-    from setup_proxy import setup_proxy
-    setup_proxy()
-except Exception as e:
-    print(f"Warning: Failed to setup proxy: {e}")
+# try:
+#     from setup_proxy import setup_proxy
+#     setup_proxy()
+# except Exception as e:
+#     print(f"Warning: Failed to setup proxy: {e}")
 
 from agent import AGENT
 from prompts.templates.system import system_message_prompt
@@ -146,7 +147,7 @@ You are using the following language model: {react_agent.llm.model_name}
         # true_log += prefix + react_agent.log_history(include_all=True) + '\n\n'
         hist = react_agent.log_history()
         hist_all = react_agent.log_history(include_all=True)
-        if cfg.benchmark.name == 'math2code_math':
+        if cfg.benchmark.name in ('math2code_math', 'code2math_code'):
             hist = format_math2code_log(hist)
             hist_all = format_math2code_log(hist_all)
         log += prefix + hist + '\n\n'

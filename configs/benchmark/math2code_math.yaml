@@ -1,7 +1,7 @@
 # Math2Code 训练阶段：纯数学题
 name: math2code_math
 task_prefix: "Question: "
-task_file: data/math2code/math_train_tasks.json
+task_file: data/math2code/math_train_tasks2.json
 max_steps: 5
 num_fewshots: 3
 eval_configs:
