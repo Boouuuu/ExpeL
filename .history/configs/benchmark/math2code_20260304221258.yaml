@@ -1,0 +1,11 @@
+# Math2Code 评测阶段：代码生成（跑 test_cases 计算 pass@1）
+name: math2code
+task_prefix: "Question: "
+task_file: data/math2code/human-eval-v2-20210705.jsonl
+max_steps: 6
+num_fewshots: 2
+eval_configs:
+  k_folds: 1
+  k_folds_seed: 42
+ai_name: Code problem-solving system
+
