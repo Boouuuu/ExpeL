@@ -168,7 +168,8 @@ def generate_guiji_completion5(prompt: str, temperature: float = 0.1) -> str:
         # extra_body={"enable_thinking": False}
     )
     return response.choices[0]["message"]["content"]
-def generate_glm_completion2(messages):
+def generate_glm_completion1(messages):
+    # openai.api_key = os.environ.get("ALIYUN_API_KEY")
     openai.api_key = os.environ.get("ALIYUN_API_KEY")
     openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     messages = replace_invalid_roles(messages)
@@ -177,7 +178,8 @@ def generate_glm_completion2(messages):
     for msg in messages:
         print(f"Role: {msg['role']}\nContent:\n{msg['content']}")
     print("="*56)
-    model="deepseek-v4.1-flash"
+    # model="deepseek-v4.1-flash"
+    model = "glm-4.7"
     api_error = None
     try:
         completion = openai.ChatCompletion.create(

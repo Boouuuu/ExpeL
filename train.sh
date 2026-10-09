@@ -33,11 +33,13 @@ python insight_extraction.py benchmark=code2math_code load_run_name=run-codetrai
 
 python insight_extraction.py benchmark=code2math_code load_run_name=run-codetrain run_name=run-codetrain-insight agent.llm=glm-4.7 agent.max_num_rules=500 agent.success_critique_num=2 testing=false resume=false >> "run-codetrain_20260914_204442.log" 2>&1
 
-python insight_extraction.py benchmark=code2math_code load_run_name=run-cfcodetrain run_name=run-cfcodetrain-insight agent.llm=glm-4.7 agent.max_num_rules=1000 agent.success_critique_num=2 testing=false resume=false > "run-cfcodetrain_%datetime:~0,8%_%datetime:~8,6%.log" 2>&1
+python insight_extraction.py benchmark=code2math_code load_run_name=run-cfcodetrain run_name=run-cfcodetrain-insight agent.llm=glm-4.7 agent.max_num_rules=1000 agent.success_critique_num=2 testing=false resume=false > "expel-cfcodetrain_%datetime:~0,8%_%datetime:~8,6%.log" 2>&1
+
+python insight_extraction.py benchmark=code2math_code load_run_name=run-cfcodetrain run_name=run-glm-2k-expel agent.llm=glm-4.7 agent.max_num_rules=500 agent.success_critique_num=2 testing=false resume=false > "run-glm-2k-expel_math_train_%datetime:~0,8%_%datetime:~8,6%.log" 2>&1
 
 python insight_extraction.py benchmark=math2code_math load_run_name=run-glm-2k run_name=run-glm-2k-expel agent.llm=glm-4.7 agent.max_num_rules=500 agent.success_critique_num=2 testing=false resume=false > "run-glm-2k-expel_math_train_%datetime:~0,8%_%datetime:~8,6%.log" 2>&1
 
-
+conda env create -n expel -f "%USERPROFILE%\Desktop\expel-environment.yml
 
 python train.py benchmark=physics2code_physics run_name=run-physicsTrain agent.llm=glm-4.7 testing=false resume=false > "run-physicsTrain_%datetime:~0,8%_%datetime:~8,6%.log" 2>&1
 

@@ -1,17 +1,9 @@
 
-from typing import Callable, List
-import time
-import os
-import random
-import threading
 
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import ChatMessage
+import os
+
 import openai
 import requests
-import json
-import http.client
-
 
 def replace_invalid_roles(messages):
     """
@@ -44,6 +36,92 @@ def replace_invalid_roles(messages):
     
     return processed_messages
 def generate_glm_completion(messages):
+    messages = replace_invalid_roles(messages)
+    print("="*20 + " Prompt History " + "="*20)
+    for msg in messages:
+        print(f"Role: {msg['role']}\nContent:\n{msg['content']}")
+    print("="*56)
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+
+    payload = {
+        "model": "glm-5.3-flash",
+        "messages": messages,
+        "stream": False,
+        "temperature": 1,
+        "top_p": 0.95,
+        # "max_tokens": 4096,
+        # "thinking": {"type": "disabled"},
+        "reasoning_effort": "low",
+        "thinking": {"type": "enabled"},
+        "response_format": {"type": "text"},
+        "stop": ["Observation"],
+    }
+    session = _direct_requests_session()
+    # 逐个尝试 Key 池：遇到 429 立即切换到下一个 Key，无需等外层退避
+    last_err = None
+    for _ in range(len(GLM_API_KEYS)):
+        key_name, api_key = current_glm_key()
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        time.sleep(0.5)  # Add a delay of 0.5 seconds before the API call
+        try:
+            attempt = (_glm_key_idx % len(GLM_API_KEYS)) + 1
+            print(f'[{_ts()}] 调用 {payload["model"]}（Key="{key_name}"，第 {attempt}/{len(GLM_API_KEYS)} 个），读超时最长 120s ...', flush=True)
+            response = _post_with_heartbeat(session, url, timeout=(10, 120), json=payload, headers=headers)
+            # 打印状态码与响应体片段（错误看原因，成功留存档便于确认错误码）
+            print(f'[{_ts()}] HTTP 状态码: {response.status_code}', flush=True)
+            print(f'[{_ts()}] 响应体片段: {response.text[:2000]}', flush=True)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status == 429:
+                detail = ''
+                try:
+                    detail = e.response.text[:200]
+                except Exception:
+                    pass
+                next_name = GLM_API_KEYS[(_glm_key_idx + 1) % len(GLM_API_KEYS)][0]
+                print(f'\n[{_ts()}] [429] Key "{key_name}" 被限流，自动切换到下一个 Key "{next_name}"... detail: {detail}', flush=True)
+                advance_glm_key()
+                last_err = e
+                continue
+            raise
+        break
+    else:
+        # 所有 Key 都被限流：抛给外层 GPTWrapper 做指数退避后重来
+        print(f'\n[429] 全部 {len(GLM_API_KEYS)} 个 Key 均被限流，交由外层退避重试...')
+        raise last_err
+    # try:
+    #     print("llm response:", response.text)
+    # except UnicodeEncodeError:
+    #     print("llm response:", response.text.encode('utf-8', errors='replace').decode('utf-8'))
+
+    llm_response = json.loads(response.text)
+    content_json_str = llm_response["choices"][0]["message"]["content"]
+    try:
+        content_data = json.loads(content_json_str)
+        if isinstance(content_data, list):
+            answer = None
+            for item in content_data:
+                if isinstance(item, dict) and "answer" in item:
+                    answer = item.get("answer")
+                    break
+            if answer is None:
+                answer = content_json_str
+        elif isinstance(content_data, dict):
+            answer = content_data.get("answer", content_json_str)
+        else:
+            answer = content_json_str
+        return answer.strip() if answer else ""
+
+    except json.JSONDecodeError:
+        answer = content_json_str
+        return answer.strip() if answer else ""
+
+
+def generate_glm_completion2(messages):
     openai.api_key = os.environ["OPENAI_API_KEY"]
     openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     messages = replace_invalid_roles(messages)
