@@ -9,12 +9,38 @@ from .fever.fever import FeverEnv
 from .alfworld.alfworld import AlfworldEnv
 from .webshop.webshop import WebshopEnv
 from .math2code_math.math_train_env import MathTrainEnv
+from .physics2code_physics.physics_train_env import PhysicsTrainEnv
+from .chemistry2code_chemistry.chemistry_train_env import ChemTrainEnv
 from .code2math_code.code_train_env import CodeTrainEnv
 from utils import get_env_name_from_gamefile
 
 # Taken from ReAct Github
 idxs = list(range(7405))
 random.Random(233).shuffle(idxs)
+
+
+def _init_code2math_code_tasks(cfg):
+    """与 CodeTrainEnv 中 self.question 一致：problem_description + starter_code；缺省时回退 prompt。"""
+    tasks = []
+    with open(cfg.benchmark.task_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            problem = json.loads(line)
+            body_raw = str(problem.get("problem_description", "") or "") + "\n" + str(
+                problem.get("starter_code", "") or ""
+            )
+            body = body_raw if body_raw.strip() else str(problem.get("prompt", "") or "")
+            tasks.append(
+                {
+                    "task": f'{cfg.benchmark.task_prefix}{body}',
+                    "env_kwargs": {"problem": problem},
+                    "env_name": "code2math_code",
+                }
+            )
+    return tasks
+
 
 INIT_TASKS_FN = dict(
     hotpotqa=lambda cfg: [
@@ -62,6 +88,24 @@ INIT_TASKS_FN = dict(
         },
         'env_name': 'math2code_math',
     } for row in json.load(open(cfg.benchmark.task_file, "r", encoding="utf-8"))],
+    physics2code_physics=lambda cfg: [
+        {
+        'task': f'{cfg.benchmark.task_prefix}{row["question"]}',
+        'env_kwargs': {
+            'question': row['question'],
+            'key': row['key'],
+        },
+        'env_name': 'physics2code_physics',
+    } for row in json.load(open(cfg.benchmark.task_file, "r", encoding="utf-8"))],
+    chemistry2code_chemistry=lambda cfg: [
+        {
+        'task': f'{cfg.benchmark.task_prefix}{row["question"]}',
+        'env_kwargs': {
+            'question': row['question'],
+            'key': row['key'],
+        },
+        'env_name': 'chemistry2code_chemistry',
+    } for row in json.load(open(cfg.benchmark.task_file, "r", encoding="utf-8"))],
     math2code=lambda cfg: [
         # math2code now uses HumanEval-style data in JSONL format.
         # Each line is a JSON object with at least: task_id, prompt,
@@ -80,19 +124,7 @@ INIT_TASKS_FN = dict(
         for line in open(cfg.benchmark.task_file, "r", encoding="utf-8")
         if line.strip()
     )],
-    code2math_code=lambda cfg: [
-        {
-        'task': f'{cfg.benchmark.task_prefix}{problem["prompt"]}',
-        'env_kwargs': {
-            'problem': problem,
-        },
-        'env_name': 'code2math_code',
-    }
-    for problem in (
-        json.loads(line)
-        for line in open(cfg.benchmark.task_file, "r", encoding="utf-8")
-        if line.strip()
-    )],
+    code2math_code=_init_code2math_code_tasks,
 )
 
 ENVS = dict(
@@ -101,5 +133,7 @@ ENVS = dict(
     alfworld=AlfworldEnv,
     webshop=WebshopEnv,
     math2code_math=MathTrainEnv,
+    physics2code_physics=PhysicsTrainEnv,
+    chemistry2code_chemistry=ChemTrainEnv,
     code2math_code=CodeTrainEnv,
 )

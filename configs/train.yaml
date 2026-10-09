@@ -11,6 +11,8 @@ log_dir: logs
 run_name: run
 testing: true
 resume: false
+verbose_trace: false
+manual_finish_review: false  # math2code_math: Finish 自动判错时打印答案并等待人工确认
 
 # remove hydra output files
 hydra:  

@@ -2,6 +2,7 @@ import random
 from typing import List, Dict, Callable, Union, Any, Tuple
 import re
 from functools import partial
+from pathlib import Path
 
 from langchain.vectorstores import FAISS
 from langchain.prompts import PromptTemplate
@@ -12,10 +13,20 @@ from scipy.spatial.distance import cosine
 
 from agent import ReflectAgent, ReactAgent
 from agent.reflect import Count
-from utils import random_divide_list, save_trajectories_log, get_env_name_from_task, trace_prompt_history
+from utils import parse_log, random_divide_list, save_trajectories_log, get_env_name_from_task, trace_prompt_history
 from memory import Trajectory
 
 from copy import deepcopy
+
+from agent.insight_pool import (
+    canonical_insights_pool_path,
+    ensure_insights_file,
+    load_pool,
+    merge_pool_with_proposed_batch,
+    parse_insight_json_objects,
+    pool_to_rule_lines,
+)
+from prompts.templates.human import VERIFICATION_INSTRUCTION
 
 class ExpelAgent(ReflectAgent):
     def __init__(self,
@@ -36,10 +47,12 @@ class ExpelAgent(ReflectAgent):
                  max_fewshot_tokens: int,
                  reranker: str,
                  buffer_retrieve_ratio: int,
+                 verbose_trace: bool = False,
                  *args,
                  **kwargs,
                  ) -> None:
         self.benchmark_name = benchmark_name
+        self.verbose_trace = verbose_trace
         self.system_critique_instructions = system_critique_instructions
         self.human_critiques = human_critiques
         self.max_num_rules = max_num_rules
@@ -67,6 +80,7 @@ class ExpelAgent(ReflectAgent):
         self.cache_rules = {}
         self._train = True
         super().__init__(benchmark_name=benchmark_name, *args, **kwargs)
+
         self.idx2task = {idx: task['task'] for idx, task in enumerate(self.tasks)}
         self.task2idx = {task['task']: idx for idx, task in enumerate(self.tasks)}
 
@@ -101,6 +115,8 @@ class ExpelAgent(ReflectAgent):
             )
             self.succeeded_trial_history = deepcopy(self.succeeded_trial_history)
             self.failed_trial_history = deepcopy(self.failed_trial_history)
+            
+            print("Failed trial history:", self.failed_trial_history)
 
             # first time doing the task
             if self.task not in self.failed_trial_history:
@@ -158,7 +174,10 @@ class ExpelAgent(ReflectAgent):
         # make sure to only take the training ids, assuming theres only one success trajectory per task
         all_success = []
         for task in self.succeeded_trial_history:
-            idx = self.task2idx[task]
+            try:
+                idx = self.task2idx[task]
+            except:
+                idx = random.randint(0, len(succeeded_trial_history)-1)  # 随机0~1049一个整数
             if idx in training_ids and len(self.succeeded_trial_history[task]) > 0:
                 all_success.append((self.remove_task_suffix(task), self.succeeded_trial_history[task][0].trajectory))
         all_success = random_divide_list(all_success, self.success_critique_num)
@@ -218,15 +237,21 @@ class ExpelAgent(ReflectAgent):
             critique_type += '_existing_rules'
         if existing_rules == []:
             existing_rules = ['']
-
+        
+        
         # system prompt - 使用dict格式
-        system_content = self.system_prompt['content'].format(
-            instruction=self.system_critique_instructions[critique_type].format(
-                fewshots=[],
-            ),
-            ai_name='an advanced reasoning agent that can critique past task trajectories of youself' if existing_rules is None \
-                else 'an advanced reasoning agent that can add, edit or remove rules from your existing rule set, based on forming new critiques of past task trajectories',
-        )
+        # system_content = self.system_prompt['content'].format(
+        #     instruction=self.system_critique_instructions[critique_type].format(
+        #         fewshots=[],
+        #     ),
+        #     ai_name='an advanced reasoning agent that can critique past task trajectories of youself' if existing_rules is None \
+        #         else 'an advanced reasoning agent that can add, edit or remove rules from your existing rule set, based on forming new critiques of past task trajectories',
+        # )
+        system_content=self.system_critique_instructions[critique_type]
+        # print("\n###################################\n")
+        # print("system_prompt:", self.system_prompt)
+        # print(f'system_content: {system_content}')
+        
         critique_history.append({
             'role': self.system_prompt['role'],
             'content': system_content
@@ -317,7 +342,15 @@ class ExpelAgent(ReflectAgent):
         loaded_log: str = None,
         eval_idx_list: List[int] = None,
         saving_dict: bool = False,
+        insights_pool_path: str = None,
     ) -> str:
+        if insights_pool_path:
+            pool_json_path = Path(insights_pool_path)
+        elif logging_dir:
+            pool_json_path = canonical_insights_pool_path(Path(logging_dir).parent)
+        else:
+            pool_json_path = None
+
         if load_cache_fold is not None:
             self.rules = '\n'.join([f'{i}. {item}' for i, item in enumerate(self.cache_rules.get(load_cache_fold, []), 1)])
             print("\n=====================================\nLoaded rules:", self.rules)
@@ -331,10 +364,41 @@ class ExpelAgent(ReflectAgent):
                 reflections=reflections,
                 task=task,
             )
-            parsed_operations = parse_rules(llm_output)
+            if pool_json_path is None:
+                raise ValueError("insights_pool_path or logging_dir is required for insight pool updates")
+            ensure_insights_file(pool_json_path)
+            pool = load_pool(pool_json_path)
+            proposed_list = parse_insight_json_objects(llm_output)
 
-            # update the rule_items with counter
-            self.rule_items_with_count = update_rules(self.rule_items_with_count, parsed_operations, list_full = self.max_num_rules+5 <= len(self.rule_items_with_count))
+            if proposed_list:
+                def _verifier_llm(msgs: List[dict]) -> str:
+                    if self.testing:
+                        print("\n[Verifier LLM — testing mode, paste JSON response]\n")
+                        for m in msgs:
+                            self.print_message(m, self.token_counter)
+                        return input()
+                    try:
+                        return self.llm(msgs, replace_newline=False)
+                    except InvalidRequestError:
+                        return self.long_context_llm(msgs, replace_newline=False)
+
+                pool, vlog = merge_pool_with_proposed_batch(
+                    pool,
+                    proposed_list,
+                    pool_json_path,
+                    _verifier_llm,
+                    VERIFICATION_INSTRUCTION,
+                )
+                llm_output = llm_output + "\n" + vlog
+                self.rule_items = pool_to_rule_lines(pool)
+                self.rule_items_with_count = [(s, 2) for s in self.rule_items]
+            else:
+                parsed_operations = parse_rules(llm_output)
+                self.rule_items_with_count = update_rules(
+                    self.rule_items_with_count,
+                    parsed_operations,
+                    list_full=self.max_num_rules + 5 <= len(self.rule_items_with_count),
+                )
 
             new_ordered_rules_str = [rule[0] for rule in self.rule_items_with_count]
             return new_ordered_rules_str, llm_output
@@ -344,21 +408,36 @@ class ExpelAgent(ReflectAgent):
         if resume_flag:
             self.rule_items = []
             self.rule_items_with_count: List[tuple(str, int)] = []
+        if pool_json_path is not None:
+            ensure_insights_file(pool_json_path)
+            _pool0 = load_pool(pool_json_path)
+            if _pool0:
+                self.rule_items = pool_to_rule_lines(_pool0)
+                self.rule_items_with_count = [(s, 2) for s in self.rule_items]
+            print(f"[Insight Pool] using {pool_json_path} ({len(_pool0)} entries)")
         agent_dicts = []
-        if loaded_log is None:
-            all_logs = '################ Compare Critiques ################\n'
-        else:
-            all_logs = loaded_log
+        # if loaded_log is None:
+        #     all_logs = '################ Compare Critiques ################\n'
+        # else:
+        #     all_logs = loaded_log
         for training_id in training_ids:
+            print(f"=====TASK {training_id}=====")
             training_task = self.idx2task[training_id]
+            # Debug prints
+            print(f"[DEBUG] Processing task: {training_task}")
+            print(f"[DEBUG] Succeeded trials for {training_task}: {len(self.succeeded_trial_history.get(training_task, []))} entries")
+            print(f"[DEBUG] Failed trials for {training_task}: {len(self.failed_trial_history.get(training_task, []))} entries")
+
             if (loaded_dict is not None and loaded_dict['critique_summary_section'] == 'compare' and \
                 loaded_dict['critique_summary_idx'][0] == training_id):
                 resume_flag = True
                 # if there are still failed tasks to do, then dont continue, otherwise do the next idx's critiques
                 if len(self.failed_trial_history.get(training_task, [])) - 1 <= loaded_dict['critique_summary_idx'][1]:
                     fail_resume_flag = True
+                    print(f"[DEBUG] Skipping comparative analysis for {training_task} due to resume logic.")
                     continue
             elif not resume_flag:
+                print(f"[DEBUG] Skipping task {training_task} due to not resume_flag.")
                 continue
             # 检查键是否存在
             if training_task not in self.succeeded_trial_history:
@@ -376,60 +455,85 @@ class ExpelAgent(ReflectAgent):
                         elif e <= loaded_dict['critique_summary_idx'][1]:
                             continue
                         fail_resume_flag = True
+                        print(f"\n[对比分析] 任务: {training_task}, 第 {e + 1} 轮对比 (成功轨迹 vs 第 {e + 1} 条失败轨迹)")
                         self.rule_items, llm_output = extend_rules(self.rule_items, success_history, fail_history.trajectory.strip(), training_task)
-                        all_logs += training_task + '\n' + success_history + '\n' + fail_history.trajectory.strip() + f'\n-------\n{llm_output}\n-------\n' +'\n- ' + '\n- '.join([str(r) + " {" + str(c) + "}" for r, c in self.rule_items_with_count]) + '\n\n'
+                        # all_logs += training_task + '\n' + success_history + '\n' + fail_history.trajectory.strip() + f'\n-------\n{llm_output}\n-------\n' +'\n- ' + '\n- '.join([str(r) + " {" + str(c) + "}" for r, c in self.rule_items_with_count]) + '\n\n'
+                        new_logs = training_task + '\n' + success_history + '\n' + fail_history.trajectory.strip() + f'\n-------\n{llm_output}\n-------\n' +'\n- ' + '\n- '.join([str(r) + " {" + str(c) + "}" for r, c in self.rule_items_with_count]) + '\n\n'
                         if saving_dict:
                             save_dict = {k: deepcopy(v) for k, v in self.__dict__.items() if type(v) in [list, set, str, bool, int, dict, Count] and k not in ['openai_api_key', 'llm']}
                             save_dict['critique_summary_section'] = 'compare'
                             save_dict['critique_summary_idx'] = (training_id, e)
                             save_dict['critique_summary_fold'] = cache_fold if cache_fold is not None else 0
-                            save_dict['critique_summary_log'] = all_logs
+                            save_dict['critique_summary_log'] = new_logs
                             save_dict['eval_idx_list'] = eval_idx_list
                             agent_dicts.append(save_dict)
-                            save_trajectories_log(path=logging_dir, log=all_logs, dicts=agent_dicts, run_name=run_name, save_true_log=False)
+                            save_trajectories_log(path=logging_dir, log=new_logs, dicts=agent_dicts, run_name=run_name, save_true_log=False)
 
         # SUCCESS
-        if loaded_log is None or (loaded_dict is not None and loaded_dict['critique_summary_section'] in ['compare']):
-            all_logs += '\n\n################ SUCCESS CRITIQUES ################\n'
-        else:
-            all_logs = loaded_log
+        # if loaded_log is None or (loaded_dict is not None and loaded_dict['critique_summary_section'] in ['compare']):
+        #     all_logs += '\n\n################ SUCCESS CRITIQUES ################\n'
+        # else:
+        #     all_logs = loaded_log
+
+        print(f"\n[DEBUG] Entering inductive summarization section.")
+        if loaded_dict is not None:
+            print(f"[DEBUG] loaded_dict['critique_summary_section']: {loaded_dict.get('critique_summary_section')}")
+
         if loaded_dict is None or (loaded_dict is not None and loaded_dict['critique_summary_section'] == 'compare'):
+            print(f"[DEBUG] Populating all_success from succeeded_trial_history.")
             all_success = []
             # for training_id in training_ids:
             #     for idx, task in enumerate(self.succeeded_trial_history):
+            print(f"[DEBUG] Number of tasks in succeeded_trial_history: {len(self.succeeded_trial_history)}")
             for task in self.succeeded_trial_history:
-                idx = self.task2idx[task]
+                try:
+                    idx = self.task2idx[task]
+                except:
+                    idx = random.randint(0, len(self.succeeded_trial_history)-1)  # 随机0~1049一个整数
                 if idx in training_ids and len(self.succeeded_trial_history[task]) > 0:
                     all_success.append((task, self.succeeded_trial_history[task][0].trajectory))
+            print(f"[DEBUG] all_success before random_divide_list: {len(all_success)} entries.")
+            self.success_critique_num = 2
             all_success = random_divide_list(all_success, self.success_critique_num)
+            print(f"[DEBUG] all_success after random_divide_list (chunks): {len(all_success)}")
+            # print(f"[DEBUG] all_success content: {all_success}") # This can be very verbose
         else:
+            resume_flag = False
             all_success = loaded_dict.get('critique_summary_all_success', [])
-        for success_chunk in all_success:
+            print(f"[DEBUG] Resuming inductive summarization. all_success loaded: {len(all_success)} entries.")
+
+        for i, success_chunk in enumerate(all_success):
+            print(f"[DEBUG] Processing success chunk {i+1}/{len(all_success)}. Current success_chunk length: {len(success_chunk)}.")
             if (loaded_dict is not None and loaded_dict['critique_summary_section'] == 'success' and \
                 loaded_dict['critique_summary_idx'] == success_chunk):
                 resume_flag = True
+                print(f"[DEBUG] Skipping inductive summarization for this chunk due to resume logic.")
                 continue
             elif not resume_flag:
+                print(f"[DEBUG] Skipping inductive summarization for this chunk due to not resume_flag.")
                 continue
+            print(f"\n[归纳分析] 第 {i + 1} 轮归纳, 包含 {len(success_chunk)} 个成功案例")
             success_trials = '\n\n'.join([self.remove_task_suffix(task) + '\n' + trajectory for task, trajectory in success_chunk])
             self.rule_items, llm_output = extend_rules(self.rule_items, success_trials.strip(), None)
-            all_logs += success_trials.strip() + f'\n-------\n{llm_output}\n-------' + '\n- ' + '\n- '.join([str(r) + " {" + str(c) + "}" for r, c in self.rule_items_with_count]) + '\n\n'
+            # all_logs += success_trials.strip() + f'\n-------\n{llm_output}\n-------' + '\n- ' + '\n- '.join([str(r) + " {" + str(c) + "}" for r, c in self.rule_items_with_count]) + '\n\n'
+            new_logs = success_trials.strip() + f'\n-------\n{llm_output}\n-------' + '\n- ' + '\n- '.join([str(r) + " {" + str(c) + "}" for r, c in self.rule_items_with_count]) + '\n\n'
+
             if saving_dict:
                 save_dict = {k: deepcopy(v) for k, v in self.__dict__.items() if type(v) in [list, set, str, bool, int, dict, Count] and k not in ['openai_api_key', 'llm']}
                 save_dict['critique_summary_all_success'] = all_success
                 save_dict['critique_summary_idx'] = success_chunk
                 save_dict['critique_summary_section'] = 'success'
                 save_dict['critique_summary_fold'] = cache_fold if cache_fold is not None else 0
-                save_dict['critique_summary_log'] = all_logs
+                save_dict['critique_summary_log'] = new_logs
                 save_dict['eval_idx_list'] = eval_idx_list
                 agent_dicts.append(save_dict)
-                save_trajectories_log(path=logging_dir, log=all_logs, dicts=agent_dicts, run_name=run_name, save_true_log=False)
+                save_trajectories_log(path=logging_dir, log=new_logs, dicts=agent_dicts, run_name=run_name, save_true_log=False)
 
         # numbered list format
         self.rules = '\n'.join([f"{i}. {item}" for i, item in enumerate(self.rule_items, 1)])
         if cache_fold is not None:
             self.cache_rules[cache_fold] = list(self.rule_items)
-        return all_logs
+        return ""
 
     def insert_before_task_prompt(self):
         # if training then reflect
@@ -451,7 +555,6 @@ class ExpelAgent(ReflectAgent):
                     'role': rule_template.get('role', 'human'),
                     'content': rule_template['content'].format(rules=self.rules)
                 })
-            trace_prompt_history(self.prompt_history, "ExpelAgent.insert_before_task_prompt: after append(rules)", getattr(self, "benchmark_name", None))
 
     def insert_after_task_prompt(self):
         pass
@@ -467,7 +570,7 @@ class ExpelAgent(ReflectAgent):
             for fewshot in self.all_fewshots:
                 # Parse a fewshot into (task, trajectory). Different benchmarks format the "task header"
                 # slightly differently.
-                if self.benchmark_name in ['hotpotqa', 'fever', 'math2code', 'math2code_math']:
+                if self.benchmark_name in ['hotpotqa', 'fever', 'math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
                     task = fewshot.split('\n')[0]
                     trajectory = '\n'.join(fewshot.split('\n')[1:])
                 elif self.benchmark_name == 'webshop':
@@ -549,14 +652,11 @@ class ExpelAgent(ReflectAgent):
             return
         # do not dynamically update during training
         if self.training or self.fewshot_strategy == 'none':
-            if self.benchmark_name in ['math2code', 'math2code_math']:
-                print(f"[Fewshot Retrieval] SKIP dynamic update "
-                      f"(training={self.training}, strategy={self.fewshot_strategy})")
             return
         # 记录旧的 fewshots 内容，方便对比更新前后的变化
         old_fewshots_list = list(self.fewshots)
         old_fewshots = '\n\n'.join(old_fewshots_list)
-        if self.benchmark_name in ['math2code', 'math2code_math']:
+        if self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
             print("\n[Fewshot Before Update] num_fewshots =", len(old_fewshots_list))
             for i, fs in enumerate(old_fewshots_list):
                 preview = fs[:240].replace('\n', ' ')
@@ -587,22 +687,22 @@ class ExpelAgent(ReflectAgent):
             # If nothing matches (e.g. no history/fewshots for this env), skip retrieval
             # and keep the existing static fewshots instead of crashing FAISS.
             if len(filtered_subset_docs) == 0:
-                if self.benchmark_name in ['math2code', 'math2code_math']:
+                if self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
                     print(f"[Fewshot VectorStore] EMPTY docs for env={self.env.env_name}, "
                           f"strategy={fewshot_strategy}")
                 return None
 
             vs = FAISS.from_documents(filtered_subset_docs, self.embedder)
             # 在 math2code 等基准下，打印当前向量库中样本的统计信息，便于理解召回空间
-            if self.benchmark_name in ['math2code', 'math2code_math']:
+            if self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
                 print(f"[Fewshot VectorStore] strategy={fewshot_strategy}, env={self.env.env_name}, "
                       f"total_docs={len(filtered_subset_docs)}")
             return vs
 
         def topk_docs(queries: Dict[str, str], query_type: str):
             # 在 math2code 等基准下，打印用于相似度检索的 query 内容
-            if self.benchmark_name in ['math2code', 'math2code_math']:
-                print("\n[Fewshot Retrieval] query_type:", query_type)
+            if self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
+                # print("\n[Fewshot Retrieval] query_type:", query_type)
                 for k, v in queries.items():
                     print(f"  - {k}: {v[:400]}{'...' if isinstance(v, str) and len(v) > 400 else ''}")
             # retrieve enough fewshots, filtering the ones that are too long
@@ -643,7 +743,7 @@ class ExpelAgent(ReflectAgent):
                 selected_any = True
 
                 # 在 math2code 等基准下，打印被选为 fewshot 的样本及其来源 task 信息
-                if self.benchmark_name in ['math2code', 'math2code_math']:
+                if self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
                     print("[Fewshot Selected] from task:")
                     print("  - task_header:", self.remove_task_suffix(selected_traj.task))
                     preview = shortest_fewshot[:400]
@@ -653,7 +753,7 @@ class ExpelAgent(ReflectAgent):
                 if len(fewshots) == self.num_fewshots:
                     break
 
-            if (not selected_any) and self.benchmark_name in ['math2code', 'math2code_math']:
+            if (not selected_any) and self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
                 print(f"[Fewshot Selected] NONE selected after filtering for env={self.env.env_name}, "
                       f"query_type={query_type}")
 
@@ -748,7 +848,7 @@ class ExpelAgent(ReflectAgent):
         # storing the new fewshots and replacing the current ones from prompt_history
         new_fewshots_list = list(self.fewshots)
         new_fewshots = '\n\n'.join(new_fewshots_list)
-        if self.benchmark_name in ['math2code', 'math2code_math']:
+        if self.benchmark_name in ['math2code', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry']:
             print("\n[Fewshot After Update] num_fewshots =", len(new_fewshots_list))
             for i, fs in enumerate(new_fewshots_list):
                 preview = fs[:240].replace('\n', ' ')
@@ -767,7 +867,6 @@ class ExpelAgent(ReflectAgent):
                 break
         if not replaced and self.testing:
             self.prompt_history.append({'role': 'human', 'content': "WARNING. Fewshots haven't been replaced."})
-        trace_prompt_history(self.prompt_history, "ExpelAgent.update_dynamic_prompt_components: after fewshot replace/append", getattr(self, "benchmark_name", None))
 
 # Utils function
 def parse_rules(llm_text):

@@ -113,159 +113,155 @@ def process_string(t):
     return result
 ]
 
-Observation 3: Answer is correct.
-""",
+Observation 3: Answer is correct.""",
 
-"""Question:
-def string_to_sha256(content):
-    \"\"\"
-    Return sha256 hash of content, or None if empty
-    Examples:
-    string_to_sha256("Python") == "11a4a60b518bf24989d481468076e5d5982884626aed9faeb35b8576fcd223e1"
-    string_to_sha256("") == None
-    \"\"\"
+# """Question:
+# def string_to_sha256(content):
+#     \"\"\"
+#     Return sha256 hash of content, or None if empty
+#     Examples:
+#     string_to_sha256("Python") == "11a4a60b518bf24989d481468076e5d5982884626aed9faeb35b8576fcd223e1"
+#     string_to_sha256("") == None
+#     \"\"\"
 
-Thought 1:
-First, I analyze the requirement: this function needs to compute the SHA256 hash of input content and return None when the content is empty. I will use Python's built-in hashlib library, which is the standard tool for SHA256 hashing. I will first implement and then verify using tests. 
+# Thought 1:
+# First, I analyze the requirement: this function needs to compute the SHA256 hash of input content and return None when the content is empty. I will use Python's built-in hashlib library, which is the standard tool for SHA256 hashing. I will first implement and then verify using tests. 
 
-Step-by-step plan:
-1. Check if content is empty → return None
-2. Encode content to utf-8
-3. Compute sha256 hash
-4. Return hexadecimal string
+# Step-by-step plan:
+# 1. Check if content is empty → return None
+# 2. Encode content to utf-8
+# 3. Compute sha256 hash
+# 4. Return hexadecimal string
 
-Test design:
-- Case 1: empty string → None
-- Case 2: known input with known hash (e.g., "Python")
+# Test design:
+# - Case 1: empty string → None
+# - Case 2: known input with known hash (e.g., "Python")
 
-Action 1: Test[
-def string_to_sha256(content):
-    import hashlib
-    if not content:
-        return None
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()
+# Action 1: Test[
+# def string_to_sha256(content):
+#     import hashlib
+#     if not content:
+#         return None
+#     return hashlib.sha256(content.encode('utf-8')).hexdigest()
 
-assert string_to_sha256("") is None
-assert string_to_sha256("Python") == "11a4a60b518bf24989d481468076e5d5982884626aed9faeb35b8576fcd223e1"
-]
+# assert string_to_sha256("") is None
+# assert string_to_sha256("Python") == "11a4a60b518bf24989d481468076e5d5982884626aed9faeb35b8576fcd223e1"
+# ]
 
-Observation 1:
-Tests passing:
-assert string_to_sha256("") is None
-assert string_to_sha256("Python") == "11a4a60b518bf24989d481468076e5d5982884626aed9faeb35b8576fcd223e1"
+# Observation 1:
+# Tests passing:
+# assert string_to_sha256("") is None
+# assert string_to_sha256("Python") == "11a4a60b518bf24989d481468076e5d5982884626aed9faeb35b8576fcd223e1"
 
-Tests failing:
-None
+# Tests failing:
+# None
 
-Thought 2:
-All test cases pass, including boundary condition. I will finish the implementation.
+# Thought 2:
+# All test cases pass, including boundary condition. I will finish the implementation.
 
-Action 2: Finish[
-def string_to_sha256(content):
-    import hashlib
-    if not content:
-        return None
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()
-]
+# Action 2: Finish[
+# def string_to_sha256(content):
+#     import hashlib
+#     if not content:
+#         return None
+#     return hashlib.sha256(content.encode('utf-8')).hexdigest()
+# ]
 
-Observation 2: Answer is correct.
-""",
+# Observation 2: Answer is correct.""",
 
+# """Question:
+# def generate_odd_numbers(x, y):
+#     \"\"\"
+#     Return all odd numbers between x and y that lie within 1 to 9 (inclusive), sorted ascending
+#     Examples:
+#     generate_odd_numbers(1, 9) == [1,3,5,7,9]
+#     generate_odd_numbers(9, 1) == [1,3,5,7,9]
+#     generate_odd_numbers(0, 5) == [1,3,5]
+#     generate_odd_numbers(10, 12) == []
+#     \"\"\"
 
-"""Question:
-def generate_odd_numbers(x, y):
-    \"\"\"
-    Return all odd numbers between x and y that lie within 1 to 9 (inclusive), sorted ascending
-    Examples:
-    generate_odd_numbers(1, 9) == [1,3,5,7,9]
-    generate_odd_numbers(9, 1) == [1,3,5,7,9]
-    generate_odd_numbers(0, 5) == [1,3,5]
-    generate_odd_numbers(10, 12) == []
-    \"\"\"
+# Thought 1:
+# First, I analyze the problem requirements: the function needs to return all odd numbers between x and y, and these numbers must be within the range 1 to 9 inclusive, then return them sorted in ascending order. I need to handle two key constraints: limit the valid range to 1–9, and filter only odd numbers. I will first implement and then verify using tests. 
 
-Thought 1:
-First, I analyze the problem requirements: the function needs to return all odd numbers between x and y, and these numbers must be within the range 1 to 9 inclusive, then return them sorted in ascending order. I need to handle two key constraints: limit the valid range to 1–9, and filter only odd numbers. I will first implement and then verify using tests. 
+# Step-by-step plan:
+# 1. Determine lower and upper bounds from x and y
+# 2. Restrict the range to [1, 9]
+# 3. Iterate through the range
+# 4. Select only odd numbers
 
-Step-by-step plan:
-1. Determine lower and upper bounds from x and y
-2. Restrict the range to [1, 9]
-3. Iterate through the range
-4. Select only odd numbers
+# Test design:
+# - Case 1: normal range (1,9)
+# - Case 2: reversed range (9,1)
+# - Case 3: partially out-of-bound (0,5)
+# - Case 4: fully out-of-bound (10,12)
 
-Test design:
-- Case 1: normal range (1,9)
-- Case 2: reversed range (9,1)
-- Case 3: partially out-of-bound (0,5)
-- Case 4: fully out-of-bound (10,12)
+# Action 1: Test[
+# def generate_odd_numbers(x, y):
+#     lower = min(x, y)
+#     upper = max(x, y)
+#     return [i for i in range(lower, upper+1) if i % 2 == 1]
 
-Action 1: Test[
-def generate_odd_numbers(x, y):
-    lower = min(x, y)
-    upper = max(x, y)
-    return [i for i in range(lower, upper+1) if i % 2 == 1]
+# assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
+# assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
+# assert generate_odd_numbers(0, 5) == [1,3,5]
+# assert generate_odd_numbers(10, 12) == []
+# ]
 
-assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
-assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
-assert generate_odd_numbers(0, 5) == [1,3,5]
-assert generate_odd_numbers(10, 12) == []
-]
+# Observation 1:
+# Tests passing:
+# assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
+# assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
 
-Observation 1:
-Tests passing:
-assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
-assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
+# Tests failing:
+# assert generate_odd_numbers(0, 5) == [1,3,5] # output: [1,3,5]
+# assert generate_odd_numbers(10, 12) == [] # output: [11]
 
-Tests failing:
-assert generate_odd_numbers(0, 5) == [1,3,5] # output: [1,3,5]
-assert generate_odd_numbers(10, 12) == [] # output: [11]
+# Thought 2:
+# The issue is that the implementation does not restrict values to the range [1,9].
+# - It incorrectly includes values like 11
+# - It does not explicitly enforce lower bound = 1 and upper bound = 9
 
-Thought 2:
-The issue is that the implementation does not restrict values to the range [1,9].
-- It incorrectly includes values like 11
-- It does not explicitly enforce lower bound = 1 and upper bound = 9
+# Fix strategy:
+# - Clamp the range using max(1, ...) and min(9, ...)
+# - If lower > upper, return empty list
 
-Fix strategy:
-- Clamp the range using max(1, ...) and min(9, ...)
-- If lower > upper, return empty list
+# Action 2: Test[
+# def generate_odd_numbers(x, y):
+#     lower = max(1, min(x, y))
+#     upper = min(9, max(x, y))
+#     if lower > upper:
+#         return []
+#     return [i for i in range(lower, upper+1) if i % 2 == 1]
 
-Action 2: Test[
-def generate_odd_numbers(x, y):
-    lower = max(1, min(x, y))
-    upper = min(9, max(x, y))
-    if lower > upper:
-        return []
-    return [i for i in range(lower, upper+1) if i % 2 == 1]
+# assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
+# assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
+# assert generate_odd_numbers(0, 5) == [1,3,5]
+# assert generate_odd_numbers(10, 12) == []
+# ]
 
-assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
-assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
-assert generate_odd_numbers(0, 5) == [1,3,5]
-assert generate_odd_numbers(10, 12) == []
-]
+# Observation 2:
+# Tests passing:
+# assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
+# assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
+# assert generate_odd_numbers(0, 5) == [1,3,5]
+# assert generate_odd_numbers(10, 12) == []
 
-Observation 2:
-Tests passing:
-assert generate_odd_numbers(1, 9) == [1,3,5,7,9]
-assert generate_odd_numbers(9, 1) == [1,3,5,7,9]
-assert generate_odd_numbers(0, 5) == [1,3,5]
-assert generate_odd_numbers(10, 12) == []
+# Tests failing:
+# None
 
-Tests failing:
-None
+# Thought 3:
+# All test cases pass after enforcing the valid range constraint. I will finish the implementation.
 
-Thought 3:
-All test cases pass after enforcing the valid range constraint. I will finish the implementation.
+# Action 3: Finish[
+# def generate_odd_numbers(x, y):
+#     lower = max(1, min(x, y))
+#     upper = min(9, max(x, y))
+#     if lower > upper:
+#         return []
+#     return [i for i in range(lower, upper+1) if i % 2 == 1]
+# ]
 
-Action 3: Finish[
-def generate_odd_numbers(x, y):
-    lower = max(1, min(x, y))
-    upper = min(9, max(x, y))
-    if lower > upper:
-        return []
-    return [i for i in range(lower, upper+1) if i % 2 == 1]
-]
-
-Observation 3: Answer is correct.
-"""
+# Observation 3: Answer is correct."""
 ]
 
 
@@ -290,31 +286,30 @@ def solve(s):
 ]
 Observation 1: Answer is incorrect.
 
-Reflection: I directly wrote the concise one-line solution but skipped breaking down the reasoning into reusable algorithmic steps. I should have first outlined the step-by-step logic (initialize flag, iterate through characters, update flag) that could be translated into a structured program and verified by test cases, instead of jumping to the final code.
-""",
-"""
-Previous Trial:
-Question: 
-def string_to_md5(text):
-    \"\"\"
-    Given a string 'text', return its md5 hash equivalent string.
-    If 'text' is an empty string, return None.
-    Examples:
-    string_to_md5('Hello world') == '3e25960a79dbc69b674cd4ec67a72c62'
-    \"\"\"
-Thought 1: Use hashlib to compute MD5 hash.
-Action 1: Finish[
-def string_to_md5(text):
-    import hashlib
-    return hashlib.md5(text.encode()).hexdigest()
+Reflection: I directly wrote the concise one-line solution but skipped breaking down the reasoning into reusable algorithmic steps. I should have first outlined the step-by-step logic (initialize flag, iterate through characters, update flag) that could be translated into a structured program and verified by test cases, instead of jumping to the final code.""",
+# """
+# Previous Trial:
+# Question: 
+# def string_to_md5(text):
+#     \"\"\"
+#     Given a string 'text', return its md5 hash equivalent string.
+#     If 'text' is an empty string, return None.
+#     Examples:
+#     string_to_md5('Hello world') == '3e25960a79dbc69b674cd4ec67a72c62'
+#     \"\"\"
+# Thought 1: Use hashlib to compute MD5 hash.
+# Action 1: Finish[
+# def string_to_md5(text):
+#     import hashlib
+#     return hashlib.md5(text.encode()).hexdigest()
+# ]
+
+# Reflection: I missed handling the empty string boundary condition and skipped verifying the logic with test cases first. When a problem includes explicit edge cases, I should first define the condition check (return None if the text is empty) as a separate step, then verify it with an empty string test case before finalizing the code."""
 ]
 
-Reflection: I missed handling the empty string boundary condition and skipped verifying the logic with test cases first. When a problem includes explicit edge cases, I should first define the condition check (return None if the text is empty) as a separate step, then verify it with an empty string test case before finalizing the code."""
-]
-
-SYSTEM_INSTRUCTION = """Solve a programming problem using interleaved Thought, Action, Observation steps. Thought can reason about the current situation, and Action can be of two types:
+SYSTEM_INSTRUCTION = """Solve a programming problem using interleaved Thought, Action, Observation steps.\nThought should reason about the current task state before each Action. It may involve problem understanding, planning, algorithm selection, local derivation, implementation reasoning, error diagnosis, hypothesis revision, or other reasoning relevant to solving the task. Keep the reasoning flexible and adapt it to the current situation.\nAction represents interaction with the execution environment and has two types:\n
 (1) Test[<code>], which sends code to a Python interpreter for execution. The code should include the function implementation and assert-based test cases that call the function. The system will execute the code and return the result as Observation.
-(2) Finish[<code>], which returns the final correct implementation and ends the task.
+(2) Finish[<code>], which submits the final implementation and terminate the task.
 
 You should first generate a Thought, then choose an Action. After each Action, STOP generate and wait for the system to return Observation. Do NOT generate Observation by yourself."""
 
@@ -327,7 +322,7 @@ HUMAN_REFLECTION_INSTRUCTION = {"role": "human", "content": human_instruction_re
 
 SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION = """You will be given two previous task trials of solving code completion problems: one successful and one unsuccessful. You failed either by giving a wrong answer with Finish[<code>] or by using up the allowed steps."""
 SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION = """You will be given successful code completion task trials."""
-SYSTEM_REFLECTION_INSTRUCTION = """You will be given a previous code completion trial. You failed either by giving a wrong answer with Finish[<code>] or by using up the steps. In a few sentences, diagnose why you failed and give a concise guide to avoid the same failure. Focus on whether your reasoning was sufficiently structured, explicit, and reusable, rather than jumping directly to the answer. Use complete sentences."""
+SYSTEM_REFLECTION_INSTRUCTION = """You will be given a previous code completion trial which you failed either by giving a wrong answer with Finish[<code>] or by using up the steps. You should give a reflection to diagnose why you failed and give a concise guide to avoid the same failure. Focus on reasoning completeness, edge case handling, and implementation correctness, rather than just syntax errors."""
 
 def _strip_leaked_observation_suffix(s: str) -> str:
     """stop=Observation 时可能残留 Observation / Observ 片段，从 Action 尾部去掉。"""
@@ -339,8 +334,11 @@ def _strip_leaked_observation_suffix(s: str) -> str:
 
 def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[dict, str, Dict[str, Any]]:
     # Check if the output contains both Thought and Action
-    thought_pattern = r'(?i)thought\s*(?:\d+|)\s*(?::|)\s*'
-    action_pattern = r'(?i)action\s*(?:\d+|)\s*(?::|)\s*'
+    # code2math 保留换行（replace_newline=False），因此用多行行首锚定来识别步骤标记：
+    # 只匹配独占行首的 "Thought N:" / "Action N:"，避免将 "reaction"/"transaction" 等
+    # 单词内嵌的 "action" 误判为步骤起点而截断 Thought（冒号必选，编号可选）。
+    thought_pattern = r'(?im)^\s*thought\s*\d*\s*:'
+    action_pattern = r'(?im)^\s*action\s*\d*\s*:'
     
     thought_match = re.search(thought_pattern, llm_output)
     action_match = re.search(action_pattern, llm_output)
@@ -368,15 +366,15 @@ def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[dict, str, Dict
         content = "\n\n".join(blocks)
 
         if action_type and parsed_action:
-            return {'role': 'ai' if ai_message else 'human', 'content': content}, 'action', {'action': full_action}
-        return {'role': 'ai' if ai_message else 'human', 'content': content}, 'action', {'action': action_content}
+            return {'role': 'ai', 'content': content}, 'action', {'action': full_action}
+        return {'role': 'ai', 'content': content}, 'action', {'action': action_content}
     
     elif thought_match:
         # Only thought exists
         thought_content = llm_output[thought_match.end():].strip()
         thought_content = re.sub(r'\n{3,}', '\n\n', thought_content).strip()
         content = f"Thought {step}:\n{thought_content}"
-        return {'role': 'ai' if ai_message else 'human', 'content': content}, 'thought', {}
+        return {'role': 'ai', 'content': content}, 'thought', {}
     
     # No clear patterns, try to parse as action
     from utils import parse_action
@@ -385,11 +383,11 @@ def LLM_PARSER(llm_output, step: int, ai_message: bool) -> Tuple[dict, str, Dict
     if action_type and parsed_action:
         full_action = f"{action_type}[{parsed_action}]"
         content = f"Action {step}: {full_action}"
-        return {'role': 'ai' if ai_message else 'human', 'content': content}, 'action', {'action': full_action}
+        return {'role': 'ai', 'content': content}, 'action', {'action': full_action}
     
     # Default to thought
     content = f"Thought {step}: {llm_output.strip()}"
-    return {'role': 'ai' if ai_message else 'human', 'content': content}, 'thought', {}
+    return {'role': 'ai', 'content': content}, 'thought', {}
 
 def OBSERVATION_FORMATTER(observation: str, step: int, *args, **kwargs) -> Tuple[dict, str]:
     return {'role': 'human', 'content': f"Observation {step}: " + observation.rstrip(':')}, 'append'

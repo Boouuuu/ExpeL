@@ -1,0 +1,10 @@
+# Chemistry2Code 训练阶段：纯化学题
+name: chemistry2code_chemistry
+task_prefix: "Question: "
+task_file: data/chemistry2code/gpqa_diamond_chemistry.json
+max_steps: 5
+num_fewshots: 3
+eval_configs:
+  k_folds: 1
+  k_folds_seed: 42
+ai_name: Chemistry problem-solving system

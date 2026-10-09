@@ -24,6 +24,7 @@ class ReflectAgent(ReactAgent):
                  *args,
                  **kwargs,
                  ) -> None:
+        self.reflection_system_instruction = reflection_system_instruction
         self.reflection_counter = Count(max_relfection_depth)
         self.reflection_fewshots = reflection_fewshots
         self.reflection_task_prompt = reflection_task_prompt
@@ -38,8 +39,8 @@ class ReflectAgent(ReactAgent):
         self.formatted_reflection = None
         self.perform_reflection = False
         self.increment_task = False
-        ai_name = 'an advanced reasoning agent that can improve based on self refection'
-        self.reflection_system_kwargs = dict(instruction=reflection_system_instruction, ai_name=ai_name)
+        ai_name = 'an advanced reasoning agent that can improve based on self reflection'
+        self.reflection_system_kwargs = dict(instruction="You are an advanced self-reflection agent.", ai_name=ai_name)
         super().__init__(*args, **kwargs)
 
     def run(self, reset: bool = True, *args, **kwargs) -> None:
@@ -51,13 +52,16 @@ class ReflectAgent(ReactAgent):
 
 
     def step(self) -> None:
+        original_prompt_history_len = len(self.prompt_history) #新增
         ReactAgent.step(self)
-        trial = self.prompt_history[self.history_index]['content'].split(self.remove_task_suffix(self.task), 1)[-1].strip()
-        steps = self.message_step_splitter(
-            lines=trial,
-            cycler=self.message_splitter,
-            step_identifier=self.identifier)
-        self.previous_trial.append({'role': 'human', 'content': steps[-1]})
+        # trial = self.prompt_history[self.history_index]['content'].split(self.remove_task_suffix(self.task), 1)[-1].strip()
+        # steps = self.message_step_splitter(
+        #     lines=trial,
+        #     cycler=self.message_splitter,
+        #     step_identifier=self.identifier)
+        # self.previous_trial.append({'role': 'human', 'content': steps[-1]})
+        if len(self.prompt_history) > original_prompt_history_len: #新增
+            self.previous_trial.extend(self.prompt_history[original_prompt_history_len:]) #新增
 
 
     def reflect(self) -> None:
@@ -108,8 +112,8 @@ class ReflectAgent(ReactAgent):
             return
         # 使用dict格式
         system_prompt = {
-            'role': self.system_prompt['role'],
-            'content': self.system_prompt['content'].format(**self.reflection_system_kwargs)
+            'role': 'system',
+            'content': self.reflection_system_instruction
         }
         self.reflection_prompt_history.append(system_prompt)
         self._build_fewshot_prompt(

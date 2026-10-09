@@ -1,7 +1,7 @@
 from typing import Callable, List
 
 from . import alfworld
-from . import hotpotQA, fever, webshop, math2code_math, code2math_code
+from . import hotpotQA, fever, webshop, math2code_math, physics2code_physics, chemistry2code_chemistry, code2math_code
 from .templates.human import *
 from .templates.system import *
 
@@ -11,6 +11,8 @@ FEWSHOTS = dict(
     alfworld=alfworld.FEWSHOTS,
     webshop=webshop.FEWSHOTS,
     math2code_math=math2code_math.FEWSHOTS,
+    physics2code_physics=physics2code_physics.FEWSHOTS,
+    chemistry2code_chemistry=chemistry2code_chemistry.FEWSHOTS,
     code2math_code=code2math_code.FEWSHOTS,
 )
 REFLECTION_FEWSHOTS = dict(
@@ -19,6 +21,8 @@ REFLECTION_FEWSHOTS = dict(
     alfworld=alfworld.REFLECTION_FEWSHOTS,
     webshop=webshop.REFLECTION_FEWSHOTS,
     math2code_math=math2code_math.REFLECTION_FEWSHOTS,
+    physics2code_physics=physics2code_physics.REFLECTION_FEWSHOTS,
+    chemistry2code_chemistry=chemistry2code_chemistry.REFLECTION_FEWSHOTS,
     code2math_code=code2math_code.REFLECTION_FEWSHOTS,
 )
 SYSTEM_INSTRUCTION = dict(
@@ -27,6 +31,8 @@ SYSTEM_INSTRUCTION = dict(
     alfworld=alfworld.SYSTEM_INSTRUCTION,
     webshop=webshop.SYSTEM_INSTRUCTION,
     math2code_math=math2code_math.SYSTEM_INSTRUCTION,
+    physics2code_physics=physics2code_physics.SYSTEM_INSTRUCTION,
+    chemistry2code_chemistry=chemistry2code_chemistry.SYSTEM_INSTRUCTION,
     code2math_code=code2math_code.SYSTEM_INSTRUCTION,
 )
 SYSTEM_REFLECTION_INSTRUCTION = dict(
@@ -35,6 +41,8 @@ SYSTEM_REFLECTION_INSTRUCTION = dict(
     alfworld=None,#alfworld.SYSTEM_REFLECTION_INSTRUCTION,
     webshop=None,#webshop.SYSTEM_REFLECTION_INSTRUCTION,
     math2code_math=math2code_math.SYSTEM_REFLECTION_INSTRUCTION,
+    physics2code_physics=physics2code_physics.SYSTEM_REFLECTION_INSTRUCTION,
+    chemistry2code_chemistry=chemistry2code_chemistry.SYSTEM_REFLECTION_INSTRUCTION,
     code2math_code=code2math_code.SYSTEM_REFLECTION_INSTRUCTION,
 )
 HUMAN_INSTRUCTION = dict(
@@ -43,6 +51,8 @@ HUMAN_INSTRUCTION = dict(
     alfworld=alfworld.HUMAN_INSTRUCTION,
     webshop=webshop.HUMAN_INSTRUCTION,
     math2code_math=math2code_math.HUMAN_INSTRUCTION,
+    physics2code_physics=physics2code_physics.HUMAN_INSTRUCTION,
+    chemistry2code_chemistry=chemistry2code_chemistry.HUMAN_INSTRUCTION,
     code2math_code=code2math_code.HUMAN_INSTRUCTION,
 )
 HUMAN_REFLECTION_INSTRUCTION = dict(
@@ -51,6 +61,8 @@ HUMAN_REFLECTION_INSTRUCTION = dict(
     alfworld=alfworld.HUMAN_REFLECTION_INSTRUCTION,
     webshop=webshop.HUMAN_REFLECTION_INSTRUCTION,
     math2code_math=math2code_math.HUMAN_REFLECTION_INSTRUCTION,
+    physics2code_physics=physics2code_physics.HUMAN_REFLECTION_INSTRUCTION,
+    chemistry2code_chemistry=chemistry2code_chemistry.HUMAN_REFLECTION_INSTRUCTION,
     code2math_code=code2math_code.HUMAN_REFLECTION_INSTRUCTION,
 )
 SYSTEM_CRITIQUE_INSTRUCTION = dict(
@@ -74,6 +86,14 @@ SYSTEM_CRITIQUE_INSTRUCTION = dict(
         compare_existing_rules=math2code_math.SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION,
         all_success_existing_rules=math2code_math.SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION,
     ),
+    physics2code_physics=dict(
+        compare_existing_rules=physics2code_physics.SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION,
+        all_success_existing_rules=physics2code_physics.SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION,
+    ),
+    chemistry2code_chemistry=dict(
+        compare_existing_rules=chemistry2code_chemistry.SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION,
+        all_success_existing_rules=chemistry2code_chemistry.SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION,
+    ),
     code2math_code=dict(
         compare_existing_rules=code2math_code.SYSTEM_CRITIQUE_EXISTING_RULES_INSTRUCTION,
         all_success_existing_rules=code2math_code.SYSTEM_CRITIQUE_ALL_SUCCESS_EXISTING_RULES_INSTRUCTION,
@@ -86,6 +106,8 @@ LLM_PARSER = dict(
     alfworld=alfworld.LLM_PARSER,
     webshop=webshop.LLM_PARSER,
     math2code_math=math2code_math.LLM_PARSER,
+    physics2code_physics=physics2code_physics.LLM_PARSER,
+    chemistry2code_chemistry=chemistry2code_chemistry.LLM_PARSER,
     code2math_code=code2math_code.LLM_PARSER,
 )
 
@@ -95,6 +117,8 @@ OBSERVATION_FORMATTER = dict(
     alfworld=alfworld.OBSERVATION_FORMATTER,
     webshop=webshop.OBSERVATION_FORMATTER,
     math2code_math=math2code_math.OBSERVATION_FORMATTER,
+    physics2code_physics=physics2code_physics.OBSERVATION_FORMATTER,
+    chemistry2code_chemistry=chemistry2code_chemistry.OBSERVATION_FORMATTER,
     code2math_code=code2math_code.OBSERVATION_FORMATTER,
 )
 
@@ -104,6 +128,8 @@ STEP_IDENTIFIER = dict(
     webshop=webshop.STEP_IDENTIFIER,
     alfworld=alfworld.STEP_IDENTIFIER,
     math2code_math=math2code_math.STEP_IDENTIFIER,
+    physics2code_physics=physics2code_physics.STEP_IDENTIFIER,
+    chemistry2code_chemistry=chemistry2code_chemistry.STEP_IDENTIFIER,
     code2math_code=code2math_code.STEP_IDENTIFIER,
 )
 
@@ -113,6 +139,8 @@ CYCLER = dict(
     webshop=webshop.CYCLER,
     alfworld=alfworld.CYCLER,
     math2code_math=math2code_math.CYCLER,
+    physics2code_physics=physics2code_physics.CYCLER,
+    chemistry2code_chemistry=chemistry2code_chemistry.CYCLER,
     code2math_code=code2math_code.CYCLER,
 )
 REFLECTION_PREFIX = dict(
@@ -121,6 +149,8 @@ REFLECTION_PREFIX = dict(
     alfworld=alfworld.REFLECTION_PREFIX,
     webshop=webshop.REFLECTION_PREFIX,
     math2code_math=math2code_math.REFLECTION_PREFIX,
+    physics2code_physics=physics2code_physics.REFLECTION_PREFIX,
+    chemistry2code_chemistry=chemistry2code_chemistry.REFLECTION_PREFIX,
     code2math_code=code2math_code.REFLECTION_PREFIX,
 )
 PREVIOUS_TRIALS_FORMATTER=dict(
@@ -129,6 +159,8 @@ PREVIOUS_TRIALS_FORMATTER=dict(
     alfworld=alfworld.PREVIOUS_TRIALS_FORMATTER,
     webshop=webshop.PREVIOUS_TRIALS_FORMATTER,
     math2code_math=math2code_math.PREVIOUS_TRIALS_FORMATTER,
+    physics2code_physics=physics2code_physics.PREVIOUS_TRIALS_FORMATTER,
+    chemistry2code_chemistry=chemistry2code_chemistry.PREVIOUS_TRIALS_FORMATTER,
     code2math_code=code2math_code.PREVIOUS_TRIALS_FORMATTER,
 )
 
@@ -138,6 +170,8 @@ STEP_STRIPPER = dict(
     alfworld=alfworld.STEP_STRIPPER,
     webshop=webshop.STEP_STRIPPER,
     math2code_math=math2code_math.STEP_STRIPPER,
+    physics2code_physics=physics2code_physics.STEP_STRIPPER,
+    chemistry2code_chemistry=chemistry2code_chemistry.STEP_STRIPPER,
     code2math_code=code2math_code.STEP_STRIPPER,
 )
 

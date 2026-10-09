@@ -1,8 +1,8 @@
 # Code2Math 训练阶段：代码补全 + 轨迹（Test 自写 assert，Finish 跑 HumanEval 风格 test）
 name: code2math_code
 task_prefix: "Question: "
-task_file: data/code2math/code_tasks.jsonl
-max_steps: 5
+task_file: data/code2math/CFDataset/cf_code_100.jsonl
+max_steps: 3
 num_fewshots: 3
 eval_configs:
   k_folds: 1

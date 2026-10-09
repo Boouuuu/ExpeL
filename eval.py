@@ -1,9 +1,10 @@
 from typing import List
 import getpass
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 import os
+import json
 from copy import deepcopy
 from functools import partial
 import dotenv
@@ -64,8 +65,21 @@ def main(cfg : DictConfig) -> None:
     if cfg.testing:
         openai_api_key = 'NO_KEY_FOR_TESTING'
     else:
-        openai_api_key = os.environ['OPENAI_API_KEY'] if 'OPENAI_API_KEY' in os.environ else getpass.getpass("Enter or paste your OpenAI API Key: ")    
-    LOG_PATH = Path('/'.join([cfg.log_dir, cfg.benchmark.name, cfg.agent_type]))
+        openai_api_key = os.environ['OPENAI_API_KEY'] if 'OPENAI_API_KEY' in os.environ else getpass.getpass("Enter or paste your OpenAI API Key: ")
+
+    # Cross-task evaluation: `benchmark` is the source (whose trajectories/insights are loaded,
+    # e.g. math2code_math), while `eval_benchmark` is the target actually evaluated on
+    # (e.g. code2math_code). When eval_benchmark is not provided, eval on `benchmark` as before.
+    src_benchmark = cfg.benchmark
+    eval_benchmark = getattr(cfg, 'eval_benchmark', None)
+    if isinstance(eval_benchmark, str) and eval_benchmark:
+        eval_benchmark = OmegaConf.load(f'configs/benchmark/{eval_benchmark}.yaml')
+    if eval_benchmark is None:
+        eval_benchmark = src_benchmark
+    eval_benchmark_name = eval_benchmark.name
+    cross_task = eval_benchmark_name != src_benchmark.name
+
+    LOG_PATH = Path('/'.join([cfg.log_dir, src_benchmark.name, cfg.agent_type]))
     SAVE_PATH = LOG_PATH / 'eval'
     SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -98,12 +112,22 @@ def main(cfg : DictConfig) -> None:
         load_true_log=cfg.resume)
     dicts = out['dicts']
 
-    # Build tasks for the current benchmark once.
-    tasks_now = INIT_TASKS_FN[cfg.benchmark.name](cfg)
+    # Build tasks for the eval (target) benchmark once. The init functions read cfg.benchmark.*,
+    # so pass a copy of the config whose `benchmark` points at the eval benchmark.
+    tasks_cfg = deepcopy(cfg)
+    tasks_cfg.benchmark = eval_benchmark
+    tasks_now = INIT_TASKS_FN[eval_benchmark_name](tasks_cfg)
     num_tasks_now = len(tasks_now)
 
-    # Determine eval order. If the loaded checkpoint contains an incompatible eval_idx_list
-    # (e.g. from another benchmark or a different task set), fall back to a valid split.
+    # Placeholder correctness for code tasks: a completion is correct iff it starts with
+    # `class Solution`. The real tests are run offline later from the generated JSONL.
+    if eval_benchmark_name == 'code2math_code':
+        eval_correctness = getattr(cfg, 'eval_correctness', None) or 'class_solution'
+        for _task in tasks_now:
+            _task['env_kwargs']['success_criterion'] = eval_correctness
+
+    # Determine eval order. For cross-task runs the loaded checkpoint's eval_idx_list belongs to
+    # the source benchmark, so always rebuild it for the target task set.
     def _default_eval_idx_list(n: int, k: int):
         k = max(int(k), 1)
         folds = [[] for _ in range(k)]
@@ -111,66 +135,74 @@ def main(cfg : DictConfig) -> None:
             folds[i % k].append(i)
         return folds
 
-    eval_idx_list = dicts[-1].get('eval_idx_list', None)
-    if (not isinstance(eval_idx_list, list)) or any((not isinstance(x, list)) for x in eval_idx_list):
-        eval_idx_list = _default_eval_idx_list(num_tasks_now, cfg.benchmark.eval_configs.k_folds)
+    if cross_task:
+        eval_idx_list = _default_eval_idx_list(num_tasks_now, eval_benchmark.eval_configs.k_folds)
     else:
-        flat = [i for fold in eval_idx_list for i in fold]
-        if (len(flat) == 0) or (max(flat) >= num_tasks_now) or (min(flat) < 0):
-            eval_idx_list = _default_eval_idx_list(num_tasks_now, cfg.benchmark.eval_configs.k_folds)
+        eval_idx_list = dicts[-1].get('eval_idx_list', None)
+        if (not isinstance(eval_idx_list, list)) or any((not isinstance(x, list)) for x in eval_idx_list):
+            eval_idx_list = _default_eval_idx_list(num_tasks_now, eval_benchmark.eval_configs.k_folds)
+        else:
+            flat = [i for fold in eval_idx_list for i in fold]
+            if (len(flat) == 0) or (max(flat) >= num_tasks_now) or (min(flat) < 0):
+                eval_idx_list = _default_eval_idx_list(num_tasks_now, eval_benchmark.eval_configs.k_folds)
     log = out['log'] if cfg.resume else f'### EVAL ORDER ###\n{eval_idx_list}\n'
     true_log = out['true_log'] if cfg.resume else f'### EVAL ORDER ###\n{eval_idx_list}\n{str(cfg)}\n'
 
     num_training_tasks = num_tasks_now
 
-    # we start at fold 0 if we are starting a new run
-    starting_fold = dicts[-1].get('starting_fold', 0)
-    # we start at the first task in the fold if we are starting a new run
-    starting_idx = dicts[-1].get('starting_idx', eval_idx_list[0][0])
+    # Cross-task runs always start a fresh evaluation on the target benchmark.
+    if cross_task:
+        starting_fold = 0
+        starting_idx = eval_idx_list[0][0]
+    else:
+        # we start at fold 0 if we are starting a new run
+        starting_fold = dicts[-1].get('starting_fold', 0)
+        # we start at the first task in the fold if we are starting a new run
+        starting_idx = dicts[-1].get('starting_idx', eval_idx_list[0][0])
 
     react_agent = AGENT[cfg.agent_type](
         name=cfg.ai_name,
-        system_instruction=SYSTEM_INSTRUCTION[cfg.benchmark.name],
-        human_instruction=HUMAN_INSTRUCTION[cfg.benchmark.name],
+        system_instruction=SYSTEM_INSTRUCTION[eval_benchmark_name],
+        human_instruction=HUMAN_INSTRUCTION[eval_benchmark_name],
         tasks=tasks_now,
-        fewshots=FEWSHOTS[cfg.benchmark.name],
+        fewshots=FEWSHOTS[eval_benchmark_name],
         system_prompt=system_message_prompt,
-        env=ENVS[cfg.benchmark.name],
-        max_steps=cfg.benchmark.max_steps,
+        env=ENVS[eval_benchmark_name],
+        max_steps=eval_benchmark.max_steps,
         openai_api_key=openai_api_key,
         llm=cfg.agent.llm,
         llm_builder=LLM_CLS,
-        reflection_fewshots=REFLECTION_FEWSHOTS[cfg.benchmark.name],
-        reflection_task_prompt=HUMAN_REFLECTION_INSTRUCTION[cfg.benchmark.name],
-        reflection_system_instruction=SYSTEM_REFLECTION_INSTRUCTION[cfg.benchmark.name],
-        reflection_system_prompt=SYSTEM_INSTRUCTION[cfg.benchmark.name],
+        reflection_fewshots=REFLECTION_FEWSHOTS[eval_benchmark_name],
+        reflection_task_prompt=HUMAN_REFLECTION_INSTRUCTION[eval_benchmark_name],
+        reflection_system_instruction=SYSTEM_REFLECTION_INSTRUCTION[eval_benchmark_name],
+        reflection_system_prompt=SYSTEM_REFLECTION_INSTRUCTION[eval_benchmark_name],
         max_relfection_depth=cfg.agent.max_reflection_depth if 'max_reflection_depth' in cfg.agent.keys() else 0,
-        system_critique_instructions=SYSTEM_CRITIQUE_INSTRUCTION[cfg.benchmark.name],
+        system_critique_instructions=SYSTEM_CRITIQUE_INSTRUCTION[eval_benchmark_name],
         human_critiques=HUMAN_CRITIQUES,
         max_num_rules=cfg.agent.max_num_rules if 'max_num_rules' in cfg.agent.keys() else 0,
-        rule_template=RULE_TEMPLATE[cfg.benchmark.name],
+        rule_template=RULE_TEMPLATE[eval_benchmark_name],
         truncate_strategy=cfg.agent.truncate_strategy if 'truncate_strategy' in cfg.agent.keys() else None,
-        llm_parser=LLM_PARSER[cfg.benchmark.name],
-        observation_formatter=OBSERVATION_FORMATTER[cfg.benchmark.name],
+        llm_parser=LLM_PARSER[eval_benchmark_name],
+        observation_formatter=OBSERVATION_FORMATTER[eval_benchmark_name],
         embedder=EMBEDDERS(cfg.agent.retrieval_kwargs.embedder_type),
         embedder_path=cfg.agent.retrieval_kwargs.embedder_path,
-        step_stripper=STEP_STRIPPER[cfg.benchmark.name],
+        step_stripper=STEP_STRIPPER[eval_benchmark_name],
         retriever_cls=RETRIEVERS(cfg.agent.retrieval_kwargs.retriever_type),
-        message_splitter=CYCLER[cfg.benchmark.name],
-        identifier=STEP_IDENTIFIER[cfg.benchmark.name],
-        message_step_splitter=partial(STEP_CYCLER, benchmark=cfg.benchmark.name),
-        reflection_prefix=REFLECTION_PREFIX[cfg.benchmark.name],
-        previous_trials_formatter=PREVIOUS_TRIALS_FORMATTER[cfg.benchmark.name],
+        message_splitter=CYCLER[eval_benchmark_name],
+        identifier=STEP_IDENTIFIER[eval_benchmark_name],
+        message_step_splitter=partial(STEP_CYCLER, benchmark=eval_benchmark_name),
+        reflection_prefix=REFLECTION_PREFIX[eval_benchmark_name],
+        previous_trials_formatter=PREVIOUS_TRIALS_FORMATTER[eval_benchmark_name],
         success_critique_num=cfg.agent.success_critique_num,
         fewshot_strategy=cfg.agent.fewshot_strategy,
-        benchmark_name=cfg.benchmark.name,
+        benchmark_name=eval_benchmark_name,
         reranker=cfg.agent.retrieval_kwargs.reranker,
         buffer_retrieve_ratio=cfg.agent.retrieval_kwargs.buffer_retrieve_ratio,
         critique_truncate_strategy=cfg.agent.critique_truncate_strategy,
         critique_summary_suffix=CRITIQUE_SUMMARY_SUFFIX,
         testing=cfg.testing,
         task_idx=starting_idx,
-        max_fewshot_tokens=get_fewshot_max_tokens(cfg.benchmark.name) if cfg.agent.retrieval_kwargs.max_fewshot_tokens == 'auto' else cfg.agent.retrieval_kwargs.max_fewshot_tokens,
+        max_fewshot_tokens=get_fewshot_max_tokens(eval_benchmark_name) if cfg.agent.retrieval_kwargs.max_fewshot_tokens == 'auto' else cfg.agent.retrieval_kwargs.max_fewshot_tokens,
     )
 
     if len(dicts) > 0:
@@ -201,6 +233,7 @@ def main(cfg : DictConfig) -> None:
     start_processing = False # Flag for starting_fold
     start_eval_idx = False # Flag for starting_idx
     first_flag = True
+    completions = []  # code completions for offline testing
     react_agent.no_rules = cfg.no_rules
 
     print(f'*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*\n\nWe are using the following model: {react_agent.llm.model_name}\n\n*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
@@ -240,6 +273,17 @@ def main(cfg : DictConfig) -> None:
 
                     react_agent.run(mode='eval', eval_idx=eval_idx)
 
+                    # Collect code completions (task_id + completion) for later offline testing.
+                    if eval_benchmark_name == 'code2math_code':
+                        problem = getattr(react_agent.env, 'problem', None) or {}
+                        task_id = problem.get('task_id', eval_idx) if isinstance(problem, dict) else eval_idx
+                        print(f"==========Task ID: {task_id}==========")
+                        completion = getattr(react_agent.env, 'submitted_code', '') or ''
+                        completions.append({'task_id': task_id, 'completion': completion})
+                        with open(f'{SAVE_PATH}/{cfg.run_name}_completions.jsonl', 'w', encoding='utf-8') as f:
+                            for _rec in completions:
+                                f.write(json.dumps(_rec, ensure_ascii=False) + '\n')
+
                     # logging
                     react_agent.update_stats()
                     log += prefix + react_agent.log_history(include_task=False) + '\n\n'
@@ -270,7 +314,7 @@ def main(cfg : DictConfig) -> None:
     parsed_result = split_logs_by_task(text=log, num_tasks=len(react_agent.tasks))
     reflection_results = plot_trial_stats(
         parsed_result=parsed_result,
-        benchmark=cfg.benchmark.name,
+        benchmark=eval_benchmark_name,
         max_trials=1,
         save_path=f"{LOG_PATH}/{cfg.run_name}_logs_stats.png",
     )
@@ -302,4 +346,11 @@ def main(cfg : DictConfig) -> None:
     )
 
 if __name__ == "__main__":
+    # 打印运行时间，格式规整
+    import time
+    start_time = time.time()
+    print("========================================")
+    print(f"start time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+    print("========================================")
+
     main()

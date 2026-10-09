@@ -1,8 +1,10 @@
-"""Math-only training env: Reason / Calculate / Finish. No code execution."""
+"""Math-only training env: Search / Finish."""
 import re
 import ast
 import operator
+import os
 from typing import Tuple
+import requests
 
 from envs.base import BaseEnv
 from utils import parse_action, EM
@@ -42,18 +44,22 @@ class MathTrainEnv(BaseEnv):
         question: str,
         key: str,
         max_steps: int = 6,
+        verbose_trace: bool = False,
     ):
+        self.verbose_trace = verbose_trace
         self.question = question
         self.key = str(key).strip()
         self.max_steps = max_steps
         self.task = "Math problem-solving. Use Reason[step], Calculate[expression], and Finish[answer]."
         self.env_name = "math2code_math"
+        self.manual_verified_correct = None
         self.reset()
 
     def reset(self):
         self.curr_step = 1
         self.answer = ""
         self.terminated = False
+        self.manual_verified_correct = None
 
     def step(self, action: str) -> Tuple[str, bool, bool, bool, bool]:
         action_type, argument = parse_action(action)
@@ -65,16 +71,55 @@ class MathTrainEnv(BaseEnv):
             else:
                 observation = "Answer is INCORRECT"
             self.terminated = True
-        elif action_type == "Reason":
-            observation = "OK."
-        elif action_type == "Calculate":
-            try:
-                val = _safe_eval(argument)
-                observation = f"Result: {val}"
-            except Exception as e:
-                observation = f"Calculate error: {e}"
+        elif action_type == "Search":
+            query = (argument or "").strip()
+            if not query:
+                observation = "Search error: empty query."
+            else:
+                # api_key = os.environ.get("TAVILY_API_KEY", "")#jiajia1
+                api_key = os.environ.get("TAVILY_API_KEY", "")
+                if not api_key:
+                    observation = "Search error: TAVILY_API_KEY is not set."
+                else:
+                    try:
+                        resp = requests.post(
+                            "https://api.tavily.com/search",
+                            json={
+                                "api_key": api_key,
+                                "query": query,
+                                "search_depth": "basic",
+                                "include_answer": True,
+                                "max_results": 1,
+                            },
+                            timeout=20,
+                        )
+                        resp.raise_for_status()
+                        data = resp.json()
+                        snippets = []
+
+                        answer = (data.get("answer") or "").strip()
+                        if answer:
+                            snippets.append(f"Answer: {answer}")
+
+                        for idx, item in enumerate(data.get("results", [])[:3], start=1):
+                            title = (item.get("title") or "").strip()
+                            content = (item.get("content") or "").strip()
+                            url = (item.get("url") or "").strip()
+                            line = f"{idx}. "
+                            if title:
+                                line += title
+                            if content:
+                                line += f" - {content}"
+                            if url:
+                                line += f" ({url})"
+                            snippets.append(line.strip())
+
+                        observation = "\n".join(snippets) if snippets else "No search results found."
+                    except Exception as e:
+                        observation = f"Search error: {e}"
+        
         else:
-            observation = "Invalid Action. Valid Actions are Reason[<step>], Calculate[<expression>], and Finish[<answer>]."
+            observation = "Invalid Action. Valid Actions are Search[<query>] and Finish[<answer>]."
 
         self.curr_step += 1
         self.reward = self.success_fn()
@@ -83,4 +128,6 @@ class MathTrainEnv(BaseEnv):
         return observation, self.reward, self.terminated, self.truncated, self.curr_step
 
     def success_fn(self) -> bool:
+        if self.manual_verified_correct is not None:
+            return self.manual_verified_correct
         return EM(self.answer, self.key)

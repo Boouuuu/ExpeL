@@ -1,0 +1,10 @@
+# Physics2Code 训练阶段：纯物理题
+name: physics2code_physics
+task_prefix: "Question: "
+task_file: data/physics2code/gpqa_diamond_physics.json
+max_steps: 5
+num_fewshots: 3
+eval_configs:
+  k_folds: 1
+  k_folds_seed: 42
+ai_name: Physics problem-solving system

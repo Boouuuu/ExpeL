@@ -16,6 +16,12 @@ run_name: run
 load_run_name: ${run_name}
 # Optional: load checkpoint from another path (e.g. insights from math2code_math when evaling math2code)
 load_log_path: null
+# Optional: benchmark to evaluate on, while `benchmark` provides the trajectories/insights to load.
+# e.g. benchmark=math2code_math eval_benchmark=code2math_code => load math insights, eval code tasks.
+eval_benchmark: null
+# Placeholder correctness for code tasks: 'class_solution' means a completion is correct iff it
+# starts with `class Solution` (real testing is done offline later). null => env's official tests.
+eval_correctness: null
 
 # remove hydra output files
 hydra:  

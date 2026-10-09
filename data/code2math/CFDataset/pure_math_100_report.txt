@@ -1,0 +1,277 @@
+========== 硬过滤统计 ==========
+  not_pure_math          9222
+  short_editorial        33
+  no_input               21
+  no_rating              8
+  no_example             24
+  bad_desc               3
+  通过硬过滤的纯数学题: 457
+
+========== 最终选中 100 条 ==========
+语义编码方式: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+
+[rating 分布]
+    800-  999: 18
+   1000- 1199: 10
+   1200- 1399: 12
+   1400- 1599: 6
+   1600- 1799: 12
+   1800- 1999: 7
+   2000- 2199: 6
+   2200- 2399: 5
+   2400- 2599: 4
+   2600- 2799: 11
+   2800- 2999: 1
+   3000- 3199: 2
+   3200- 3399: 3
+   3400- 3599: 3
+
+[标签分布]
+  math                         77
+  geometry                     23
+  number theory                15
+  combinatorics                13
+  probabilities                9
+  matrices                     6
+  fft                          4
+  ternary search               2
+  chinese remainder theorem    1
+
+[题目清单]
+   1. 1260/A          rating= 1000  Heating
+      tags: ['math']
+   2. 1210/E          rating= 2700  Wojtek and Card Tricks
+      tags: ['math']
+   3. 140/A           rating= 1700  New Year Table
+      tags: ['geometry', 'math']
+   4. 340/E           rating= 2000  Iahub and Permutations
+      tags: ['combinatorics', 'math']
+   5. 1223/A          rating=  800  CME
+      tags: ['math']
+   6. 1131/A          rating=  800  Sea Battle
+      tags: ['math']
+   7. 1519/A          rating=  800  Red and Blue Beans
+      tags: ['math']
+   8. 249/E           rating= 2600  Endless Matrix
+      tags: ['math']
+   9. 630/B           rating= 1200  Moore's Law
+      tags: ['math']
+  10. 1077/A          rating=  800  Frog Jumping
+      tags: ['math']
+  11. 669/A           rating=  800  Little Artem and Presents
+      tags: ['math']
+  12. 124/A           rating= 1000  The number of positions
+      tags: ['math']
+  13. 842/B           rating= 1100  Gleb And Pizza
+      tags: ['geometry']
+  14. 923/E           rating= 3100  Perpetual Subtraction
+      tags: ['fft', 'math', 'matrices']
+  15. 131/C           rating= 1400  The World is a Theatre
+      tags: ['combinatorics', 'math']
+  16. 630/D           rating= 1100  Hexagons!
+      tags: ['math']
+  17. 1220/G          rating= 3400  Geolocation
+      tags: ['geometry']
+  18. 578/C           rating= 2000  Weakness and Poorness
+      tags: ['ternary search']
+  19. 621/C           rating= 1700  Wet Shark and Flowers
+      tags: ['combinatorics', 'math', 'number theory', 'probabilities']
+  20. 17/D            rating= 2400  Notepad
+      tags: ['number theory']
+  21. 340/A           rating= 1200  The Wall
+      tags: ['math']
+  22. 1213/C          rating= 1200  Book Reading
+      tags: ['math']
+  23. 1185/A          rating=  800  Ropewalkers
+      tags: ['math']
+  24. 154/B           rating= 1600  Colliders
+      tags: ['math', 'number theory']
+  25. 1349/D          rating= 3200  Slime and Biscuits
+      tags: ['math', 'probabilities']
+  26. 794/B           rating= 1200  Cutting Carrot
+      tags: ['geometry', 'math']
+  27. 60/E            rating= 2600  Mushroom Gnomes
+      tags: ['math', 'matrices']
+  28. 2/C             rating= 2600  Commentator problem
+      tags: ['geometry']
+  29. 1080/A          rating=  800  Petya and Origami
+      tags: ['math']
+  30. 227/A           rating= 1300  Where do I Turn?
+      tags: ['geometry']
+  31. 1422/A          rating=  800  Fence
+      tags: ['geometry', 'math']
+  32. 617/B           rating= 1300  Chocolate
+      tags: ['combinatorics']
+  33. 535/E           rating= 2600  Tavas and Pashmaks
+      tags: ['geometry', 'math']
+  34. 1213/A          rating=  900  Chips Moving
+      tags: ['math']
+  35. 702/D           rating= 1900  Road to Post Office
+      tags: ['math']
+  36. 141/B           rating= 1400  Hopscotch
+      tags: ['geometry', 'math']
+  37. 630/N           rating= 1300  Forecast
+      tags: ['math']
+  38. 667/A           rating= 1100  Pouring Rain
+      tags: ['geometry', 'math']
+  39. 515/A           rating= 1000  Drazil and Date
+      tags: ['math']
+  40. 630/P           rating= 2100  Area of a Star
+      tags: ['geometry']
+  41. 235/A           rating= 1600  LCM Challenge
+      tags: ['number theory']
+  42. 1066/A          rating= 1100  Vova and Train
+      tags: ['math']
+  43. 23/D            rating= 2600  Tetragon
+      tags: ['geometry', 'math']
+  44. 127/A           rating=  900  Wasted Time
+      tags: ['geometry']
+  45. 70/A            rating= 1300  Cookies
+      tags: ['math']
+  46. 933/B           rating= 2000  A Determined Cleanup
+      tags: ['math']
+  47. 40/D            rating= 2600  Interesting Sequence
+      tags: ['math']
+  48. 900/B           rating= 1300  Position in Fraction
+      tags: ['math', 'number theory']
+  49. 975/E           rating= 2600  Hag's Khashba
+      tags: ['geometry']
+  50. 495/B           rating= 1600  Modular Equations
+      tags: ['math', 'number theory']
+  51. 453/A           rating= 1600  Little Pony and Expected Maximum
+      tags: ['probabilities']
+  52. 1342/E          rating= 2300  Placing Rooks
+      tags: ['combinatorics', 'fft', 'math']
+  53. 342/C           rating= 1900  Cupboard and Balloons
+      tags: ['geometry']
+  54. 1216/D          rating= 1300  Swords
+      tags: ['math']
+  55. 1877/A          rating=  800  Goals of Victory
+      tags: ['math']
+  56. 1156/A          rating= 1400  Inscribed Figures
+      tags: ['geometry']
+  57. 1795/D          rating= 1600  Triangle Coloring
+      tags: ['combinatorics', 'math']
+  58. 26/D            rating= 2400  Tickets
+      tags: ['combinatorics', 'math', 'probabilities']
+  59. 1285/A          rating=  800  Mezo Playing Zoma
+      tags: ['math']
+  60. 226/A           rating= 1400  Flying Saucer Segments
+      tags: ['math']
+  61. 446/E           rating= 3100  DZY Loves Bridges
+      tags: ['math', 'matrices']
+  62. 975/D           rating= 2000  Ghosts
+      tags: ['geometry', 'math']
+  63. 1932/B          rating= 1100  Chaya Calendar
+      tags: ['number theory']
+  64. 1141/E          rating= 1700  Superhero Battle
+      tags: ['math']
+  65. 1033/B          rating= 1100  Square Difference
+      tags: ['math', 'number theory']
+  66. 630/G           rating= 1600  Challenge Pennants
+      tags: ['combinatorics', 'math']
+  67. 1848/C          rating= 1800  Vika and Price Tags
+      tags: ['math', 'number theory']
+  68. 630/H           rating= 1400  Benches
+      tags: ['combinatorics', 'math']
+  69. 1560/B          rating=  800  Who's Opposite?
+      tags: ['math']
+  70. 201/B           rating= 1800  Guess That Car!
+      tags: ['math', 'ternary search']
+  71. 1371/A          rating=  800  Magical Sticks
+      tags: ['math']
+  72. 82/E            rating= 2600  Corridor
+      tags: ['geometry']
+  73. 1080/B          rating=  900  Margarite and the best present
+      tags: ['math']
+  74. 1190/F          rating= 3400  Tokitsukaze and Powers
+      tags: ['number theory', 'probabilities']
+  75. 1266/A          rating= 1000  Competitive Programmer
+      tags: ['chinese remainder theorem', 'math']
+  76. 630/M           rating= 1800  Turn
+      tags: ['geometry', 'math']
+  77. 28/E            rating= 2800  DravDe saves the world
+      tags: ['geometry', 'math']
+  78. 152/C           rating= 1400  Pocket Book
+      tags: ['combinatorics']
+  79. 1895/A          rating=  800  Treasure Chest
+      tags: ['math']
+  80. 1821/A          rating=  800  Matching
+      tags: ['combinatorics', 'math']
+  81. 294/C           rating= 1900  Shaass and Lights
+      tags: ['combinatorics', 'number theory']
+  82. 50/C            rating= 2000  Happy Farm 5
+      tags: ['geometry']
+  83. 83/A            rating= 1300  Magical Array
+      tags: ['math']
+  84. 1877/C          rating= 1200  Joyboard
+      tags: ['math', 'number theory']
+  85. 1305/F          rating= 2500  Kuroni and the Punishment
+      tags: ['math', 'number theory', 'probabilities']
+  86. 1358/C          rating= 1600  Celex Update
+      tags: ['math']
+  87. 385/E           rating= 2300  Bear in the Field
+      tags: ['math', 'matrices']
+  88. 115/C           rating= 2200  Plumber
+      tags: ['math']
+  89. 954/I           rating= 2200  Yet Another String Matching Problem
+      tags: ['fft', 'math']
+  90. 444/B           rating= 2300  DZY Loves FFT
+      tags: ['probabilities']
+  91. 1304/A          rating=  800  Two Rabbits
+      tags: ['math']
+  92. 190/B           rating= 1800  Surrounded
+      tags: ['geometry']
+  93. 87/E            rating= 2600  Mogohu-Rea Idol
+      tags: ['geometry']
+  94. 1081/G          rating= 3200  Mergesort Strikes Back
+      tags: ['math', 'probabilities']
+  95. 1540/E          rating= 3500  Tasty Dishes
+      tags: ['math', 'matrices']
+  96. 923/A           rating= 1700  Primal Sport
+      tags: ['math', 'number theory']
+  97. 343/A           rating= 1600  Rational Resistance
+      tags: ['math', 'number theory']
+  98. 113/D           rating= 2700  Museum
+      tags: ['math', 'matrices', 'probabilities']
+  99. 1580/F          rating= 3300  Problems for Codeforces
+      tags: ['combinatorics', 'fft', 'math']
+  100. 676/E           rating= 2400  The Last Fight Between Human and AI
+      tags: ['math']
+
+[多样性校验] 已选题目两两余弦相似度
+  max  = 0.4573
+  mean = 0.2052
+  min  = -0.1123
+
+[追加提取与去重校验]
+选择方法: 复用原硬过滤、语义输入和最大-最小距离采样；以已有 50 题为初始已选集合继续采样。
+重现原有选题顺序: True
+已有题数: 50
+排除已有题后的候选数: 407
+额外排除相同题面候选数: 0
+可用候选数: 407
+新增题数: 100
+与原题 ID 重合: 0
+与原 task_id 重合: 0
+与原题面重合: 0
+新增集合内部重复: 0
+question_id: 51-150
+转换逻辑: 用户粘贴代码的 convert_item 函数（保留其实际返回的 10 个字段）。
+校验: 数量、ID、题面、字段、样例映射、starter_code/test 语法及 test 内样例均通过。
+新增题与原题语义相似度: max=0.4552, mean=0.1636, min=-0.2086
+语义采样用于增加多样性，不保证所有知识点互不重合。
+source: C:\Users\HUAWEI\Desktop\MathWithCode2\ExpeL\data\code2math\CFDataset\final_cf_problems.jsonl
+SHA256: f6ca9eb58826e7f0218b1534f83056419021ba6b77e4c231f647d2303b59f1be
+excluded: C:\Users\HUAWEI\Desktop\MathWithCode2\ExpeL\data\code2math\CFDataset\pure_math_50.jsonl
+SHA256: ae4475ea8409e5a056d8054c9642004eba6e787f2fec2eba28d46e6914df7d0f
+existing_converted: C:\Users\HUAWEI\Desktop\MathWithCode2\ExpeL\data\code2math\CFDataset\cf_code_50.jsonl
+SHA256: 13bffafa4d900821bba180ab95298e52b23baaa6e33336b0dc8ed14e0686b20d
+converter: C:\Users\HUAWEI\Desktop\MathWithCode\Baseline\cf_format_converter.py
+SHA256: 5c29df8a48ed0e483d3e2eee33f18ac91418d9836c7dc84dcae3563f27dbf7f2
+selection_script: C:\Users\HUAWEI\Desktop\MathWithCode\Baseline\compare_results.py
+SHA256: 4d30f4905b89d2f03d04d9cd6426c6f2fcac66dd83b353f4d59418c067af69b0
+raw_output: C:\Users\HUAWEI\Desktop\MathWithCode2\ExpeL\data\code2math\CFDataset\pure_math_100.jsonl
+SHA256: ba8f3c81dbb2b62a249fe09c7aad73ecf5e23734816b15898feb6842079288e7
+converted_output: C:\Users\HUAWEI\Desktop\MathWithCode2\ExpeL\data\code2math\CFDataset\cf_code_100.jsonl
+SHA256: 5bd9fa0c050faed3cc0e099ad94f8355f242f2dad5c9e2932dd35f3139a57b9e

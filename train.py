@@ -1,8 +1,9 @@
-import getpass
+﻿import getpass
 import hydra
 from omegaconf import DictConfig
 from pathlib import Path
-import os 
+import os
+import shutil
 from copy import deepcopy
 from functools import partial
 import dotenv
@@ -44,7 +45,7 @@ from memory import (
     RETRIEVERS,
 )
 from models import LLM_CLS
-from utils import save_trajectories_log, load_trajectories_log, plot_trial_stats, split_logs_by_task, alfworld_results_per_env_name, get_webshop_mean_scores, get_fewshot_max_tokens, format_math2code_log
+from utils import save_trajectories_log, load_trajectories_log, plot_trial_stats, split_logs_by_task, alfworld_results_per_env_name, get_webshop_mean_scores, get_fewshot_max_tokens, format_math2code_log, print_and_plot_progress_stats, get_last_completed_task_from_log
 from agent.reflect import Count
 
 @hydra.main(version_base=None, config_path="configs", config_name="train")
@@ -89,7 +90,7 @@ def main(cfg : DictConfig) -> None:
         reflection_fewshots=REFLECTION_FEWSHOTS[cfg.benchmark.name],
         reflection_task_prompt=HUMAN_REFLECTION_INSTRUCTION[cfg.benchmark.name],
         reflection_system_instruction=SYSTEM_REFLECTION_INSTRUCTION[cfg.benchmark.name],
-        reflection_system_prompt=SYSTEM_INSTRUCTION[cfg.benchmark.name],
+        reflection_system_prompt=SYSTEM_REFLECTION_INSTRUCTION[cfg.benchmark.name],
         max_relfection_depth=cfg.agent.max_reflection_depth if 'max_reflection_depth' in cfg.agent.keys() else 0,
         system_critique_instructions=SYSTEM_CRITIQUE_INSTRUCTION[cfg.benchmark.name],
         human_critiques=HUMAN_CRITIQUES,
@@ -112,6 +113,8 @@ def main(cfg : DictConfig) -> None:
         critique_truncate_strategy=cfg.agent.critique_truncate_strategy,
         critique_summary_suffix=CRITIQUE_SUMMARY_SUFFIX,
         testing=cfg.testing,
+        verbose_trace=cfg.verbose_trace,
+        manual_finish_review=cfg.manual_finish_review,
         task_idx=dicts[-1]['task_idx'] if len(dicts) > 0 else 0,
         benchmark_name=cfg.benchmark.name,
         reranker=cfg.agent.retrieval_kwargs.reranker,
@@ -122,6 +125,20 @@ def main(cfg : DictConfig) -> None:
         react_agent.load_checkpoint(loaded_dict=dicts[-1], no_load_list=['testing', 'max_relfection_depth', 'fewshot_strategy', 'max_fewshot_tokens'])
         if 'eval_idx_list' in dicts[-1]:
             react_agent.eval_idx_list = dicts[-1]['eval_idx_list']
+    else:
+        # 如果pkl文件损坏或为空，从log文件中恢复task_idx
+        last_completed_task = get_last_completed_task_from_log(log)
+        if last_completed_task >= 0:
+            next_idx = last_completed_task + 1
+            print(f'Warning: Pickle file is corrupted or empty. Recovering task_idx from log: last completed task is {last_completed_task}, resuming from task_idx {next_idx}')
+            # 直接定位到下一个未完成任务，并同步 self.task / self.env，
+            # 避免只改 task_idx 而 env/task 仍指向旧任务（否则会从头重跑已完成任务）
+            react_agent.task_idx = next_idx
+            if react_agent.job_not_done():
+                react_agent.task = react_agent.tasks[react_agent.task_idx]['task']
+                react_agent.set_env(react_agent.tasks[react_agent.task_idx]['env_kwargs'], max_steps=react_agent.max_steps)
+                react_agent.env.reset()
+                react_agent.reset()
 
     print(f"""*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
@@ -136,6 +153,11 @@ You are using the following language model: {react_agent.llm.model_name}
         else:
             prefix += '\n\n'
         print(prefix + react_agent.remove_task_suffix(react_agent.task)) # remove_task_suffix used for alfworld
+        if cfg.verbose_trace and cfg.benchmark.name == 'code2math_code':
+            problem = react_agent.tasks[react_agent.task_idx]['env_kwargs'].get('problem', {})
+            meta = {k: problem.get(k) for k in ('task_id', 'entry_point') if problem.get(k)}
+            if meta:
+                print(f"[TRACE] problem metadata: {meta}")
 
         react_agent.run(mode='train')
 
@@ -147,7 +169,7 @@ You are using the following language model: {react_agent.llm.model_name}
         # true_log += prefix + react_agent.log_history(include_all=True) + '\n\n'
         hist = react_agent.log_history()
         hist_all = react_agent.log_history(include_all=True)
-        if cfg.benchmark.name in ('math2code_math', 'code2math_code'):
+        if cfg.benchmark.name in ('math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code'):
             hist = format_math2code_log(hist)
             hist_all = format_math2code_log(hist_all)
         log += prefix + hist + '\n\n'
@@ -160,8 +182,21 @@ You are using the following language model: {react_agent.llm.model_name}
         
         save_trajectories_log(
             LOG_PATH, log, dicts, true_log,
-            run_name=cfg.run_name
+            run_name=cfg.run_name, log_mode='w'
         )
+
+        # 每完成 20 题，打印并保存当前 success/fail/halted 统计图
+        success, fail, halted = react_agent.get_stats()
+        completed = success + fail + halted
+        if completed > 0 and completed % 20 == 0:
+            progress_path = f"{LOG_PATH}/{cfg.run_name}_progress_{completed}.png"
+            print_and_plot_progress_stats(
+                success, fail, halted,
+                save_path=progress_path,
+                run_name=cfg.run_name,
+                total_tasks=len(react_agent.tasks),
+            )
+            shutil.copy(progress_path, f"{LOG_PATH}/{cfg.run_name}_progress_latest.png")
         #############################################
 
     ######################################
@@ -182,11 +217,11 @@ You are using the following language model: {react_agent.llm.model_name}
         results += str(get_webshop_mean_scores(log, len(react_agent.tasks), cfg.agent.max_reflection_depth + 1))
     log += f'\n\n{results}\n#######################################'
     true_log += f'\n\n{results}\n#######################################'
-    print(results)
+    # print(results)
 
     save_trajectories_log(
         LOG_PATH, log, dicts, true_log,
-        run_name=cfg.run_name
+        run_name=cfg.run_name, log_mode='w'
     )
 
     log, dicts, true_log = '', [], ''

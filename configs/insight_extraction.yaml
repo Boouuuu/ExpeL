@@ -16,6 +16,7 @@ resume: false
 resume_fold: -1
 seed: 42
 
+
 # remove hydra output files
 hydra:  
   output_subdir: null  

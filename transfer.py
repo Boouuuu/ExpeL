@@ -1,3 +1,4 @@
+import os
 import json
 import openai
 import time
@@ -32,8 +33,8 @@ MODEL_NAME = "glm-4.7"
 
 # def generate_one_completion(messages):
 #     # jiajia
-#     # openai.api_key = "sk-a3b1a801d70747a0b7d3b2797a14ab05"
-#     openai.api_key = "sk-afa113e744a345899ad27f3452c08ffa"
+#     # openai.api_key = os.environ["OPENAI_API_KEY"]
+#     openai.api_key = os.environ["OPENAI_API_KEY"]
 #     openai.api_base = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 #     messages = replace_invalid_roles(messages)
 #     completion = openai.ChatCompletion.create(

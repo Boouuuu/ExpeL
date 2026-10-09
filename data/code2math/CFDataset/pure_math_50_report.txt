@@ -1,0 +1,144 @@
+========== 硬过滤统计 ==========
+  not_pure_math          9222
+  short_editorial        33
+  no_input               21
+  no_rating              8
+  no_example             24
+  bad_desc               3
+  通过硬过滤的纯数学题: 457
+
+========== 最终选中 50 条 ==========
+语义编码方式: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+
+[rating 分布]
+    800-  999: 11
+   1000- 1199: 6
+   1200- 1399: 4
+   1400- 1599: 1
+   1600- 1799: 5
+   1800- 1999: 3
+   2200- 2399: 2
+   2400- 2599: 2
+   2600- 2799: 3
+   2800- 2999: 5
+   3000- 3199: 5
+   3200- 3399: 2
+   3400- 3599: 1
+
+[标签分布]
+  math                         41
+  combinatorics                7
+  geometry                     7
+  number theory                6
+  probabilities                4
+  fft                          2
+  chinese remainder theorem    2
+  ternary search               1
+  matrices                     1
+
+[题目清单]
+   1. 1036/B          rating= 1600  Diagonal Walking v.2
+      tags: ['math']
+   2. 630/F           rating= 1300  Selection of Personnel
+      tags: ['combinatorics', 'math']
+   3. 135/E           rating= 3000  Weak Subsequence
+      tags: ['combinatorics']
+   4. 937/C           rating= 1700  Save Energy!
+      tags: ['math']
+   5. 1086/F          rating= 3500  Forest Fires
+      tags: ['math']
+   6. 1822/C          rating=  800  Bun Lover
+      tags: ['math']
+   7. 592/C           rating= 1800  The Big Race
+      tags: ['math']
+   8. 765/C           rating= 1200  Table Tennis Game 2
+      tags: ['math']
+   9. 1279/A          rating=  900  New Year Garland
+      tags: ['math']
+  10. 1482/A          rating=  800  Prison Break
+      tags: ['math']
+  11. 98/C            rating= 2500  Help Greg the Dwarf
+      tags: ['geometry', 'ternary search']
+  12. 388/E           rating= 3100  Fox and Meteor Shower
+      tags: ['geometry']
+  13. 598/F           rating= 2900  Cut Length
+      tags: ['geometry']
+  14. 1674/B          rating=  800  Dictionary
+      tags: ['combinatorics', 'math']
+  15. 86/A            rating= 1600  Reflection
+      tags: ['math']
+  16. 319/A           rating= 1600  Malek Dance Club
+      tags: ['combinatorics', 'math']
+  17. 868/G           rating= 3300  El Toll Caves
+      tags: ['math']
+  18. 1041/B          rating= 1000  Buying a TV Set
+      tags: ['math']
+  19. 1593/A          rating=  800  Elections
+      tags: ['math']
+  20. 869/B           rating= 1100  The Eternal Immortality
+      tags: ['math']
+  21. 1450/H1         rating= 2900  Multithreading (Easy Version)
+      tags: ['combinatorics', 'fft', 'math']
+  22. 77/B            rating= 1800  Falling Anvils
+      tags: ['math', 'probabilities']
+  23. 1280/E          rating= 2900  Kirchhoff's Current Loss
+      tags: ['math']
+  24. 645/F           rating= 2500  Cowslip Collections
+      tags: ['combinatorics', 'math', 'number theory']
+  25. 15/B            rating= 1800  Laser
+      tags: ['math']
+  26. 329/E           rating= 3100  Evil
+      tags: ['math']
+  27. 965/A           rating=  800  Paper Airplanes
+      tags: ['math']
+  28. 624/A           rating=  800  Save Luke
+      tags: ['math']
+  29. 964/B           rating= 1300  Messages
+      tags: ['math']
+  30. 987/B           rating= 1100  High School: Become Human
+      tags: ['math']
+  31. 1582/A          rating=  800  Luntik and Concerts
+      tags: ['math']
+  32. 1303/B          rating= 1400  National Project
+      tags: ['math']
+  33. 1020/A          rating= 1000  New Building for SIS
+      tags: ['math']
+  34. 850/F           rating= 2800  Rainbow Balls
+      tags: ['math']
+  35. 733/B           rating= 1100  Parade
+      tags: ['math']
+  36. 1/A             rating= 1000  Theatre Square
+      tags: ['math']
+  37. 50/E            rating= 2300  Square Equation Roots
+      tags: ['math']
+  38. 904/F           rating= 2700  Power Tower
+      tags: ['chinese remainder theorem', 'math', 'number theory']
+  39. 54/E            rating= 2700  Vacuum Сleaner
+      tags: ['geometry']
+  40. 711/E           rating= 2300  ZS and The Birthday Paradox
+      tags: ['math', 'number theory', 'probabilities']
+  41. 986/D           rating= 3100  Perfect Encoding
+      tags: ['fft', 'math']
+  42. 1525/A          rating=  800  Potion-making
+      tags: ['math', 'number theory']
+  43. 1344/F          rating= 3200  Piet's Palette
+      tags: ['matrices']
+  44. 1487/B          rating= 1200  Cat Cycle
+      tags: ['math', 'number theory']
+  45. 1955/A          rating=  800  Yogurt Sale
+      tags: ['math']
+  46. 154/E           rating= 3000  Martian Colony
+      tags: ['geometry']
+  47. 107/E           rating= 2700  Darts
+      tags: ['geometry', 'probabilities']
+  48. 935/C           rating= 1600  Fifa and Fafa
+      tags: ['geometry']
+  49. 9/A             rating=  800  Die Roll
+      tags: ['math', 'probabilities']
+  50. 896/D           rating= 2900  Nephren Runs a Cinema
+      tags: ['chinese remainder theorem', 'combinatorics', 'math', 'number theory']
+
+[多样性校验] 已选题目两两余弦相似度
+  max  = 0.3297
+  mean = 0.1292
+  min  = -0.1618

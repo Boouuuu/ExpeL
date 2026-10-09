@@ -4,6 +4,10 @@ from omegaconf import DictConfig
 from pathlib import Path
 from functools import partial
 import os
+from memory import Trajectory
+os.environ["HF_HUB_DISABLE_ETAG"] = "1"
+os.environ["HF_HUB_DISABLE_VALIDATION"] = "1"
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 import random
 # 放在 Python 文件 最顶部
 import sys
@@ -61,6 +65,7 @@ def main(cfg : DictConfig) -> None:
     LOG_PATH = Path('/'.join([cfg.log_dir, cfg.benchmark.name, cfg.agent_type]))
     SAVE_PATH = LOG_PATH / 'extracted_insights'
     SAVE_PATH.mkdir(parents=True, exist_ok=True)
+    INSIGHTS_POOL_PATH = SAVE_PATH / 'insights.json'
     
     # Overwriting confirmation
     if not cfg.resume and os.path.exists(f"{SAVE_PATH}/{cfg.run_name}.pkl") and cfg.run_name != 'test':
@@ -80,7 +85,7 @@ def main(cfg : DictConfig) -> None:
             load_true_log=False
         )
     dicts = out['dicts']
-    log = out['log'] if cfg.resume else ''
+    # log = out['log'] if cfg.resume else ''
 
     cfg.folded = True
     react_agent = AGENT[cfg.agent_type](
@@ -128,10 +133,16 @@ def main(cfg : DictConfig) -> None:
     )
 
     print(f'Loading agent from {LOG_PATH}')
+    print(f'Insight pool (in-place update): {INSIGHTS_POOL_PATH}')
     # tasks / idx2task / task2idx 必须与当前 cfg 下的 INIT_TASKS_FN 一致；checkpoint 里存的是训练当时的索引表，
     # 若训练子集更小（例如只跑了前 41 条），恢复后会缺键导致 create_rules 里 KeyError。
     no_load_list = ['ai_message', 'message_type_format', 'max_num_rules', 'testing', 'human_critiques', 'system_critique_instructions', 'fewshot_strategy', 'success', 'halted', 'fail', 'task_idx', 'prompt_history', 'critique_truncate_strategy', 'success_critique_num', 'reflection_fewshots', 'reflection_system_prompt', 'reflection_prefix', 'reflection_prompt_history', 'reflections', 'previous_trial', 'perform_reflection', 'increment_task', 'reflection_system_kwargs', 'prepend_human_instruction', 'name', 'tasks', 'idx2task', 'task2idx', 'human_instruction_kwargs', 'all_system_instruction', 'all_fewshots', 'max_steps', 'ordered_summary', 'fewshots', 'system_instruction', 'num_fewshots', 'curr_step', 'log_idx', 'pretask_idx', 'reflect_interaction_idx', 'truncated', 'reward', 'terminated', 'autoqregressive_model_instruction', 'failed_training_task_idx', '_train', 'task', 'eval_idx_list', 'starting_fold', 'starting_idx', 'critique_summary_suffix']
     react_agent.load_checkpoint(dicts[-1], no_load_list=no_load_list)
+    # Explicitly load histories as load_checkpoint might not handle Trajectory objects correctly
+    if 'succeeded_trial_history' in dicts[-1]:
+        react_agent.succeeded_trial_history = dicts[-1]['succeeded_trial_history']
+    if 'failed_trial_history' in dicts[-1]:
+        react_agent.failed_trial_history = dicts[-1]['failed_trial_history']
     react_agent.idx2task = {idx: t['task'] for idx, t in enumerate(react_agent.tasks)}
     react_agent.task2idx = {t['task']: idx for idx, t in enumerate(react_agent.tasks)}
 
@@ -148,7 +159,7 @@ def main(cfg : DictConfig) -> None:
 
     resume_starting_fold = starting_fold
     critique_summary_log = dicts[-1].get('critique_summary_log', '')
-
+    newlog = ""
     for k, eval_idxs in enumerate(eval_idx_list):
         if k < starting_fold:
             continue
@@ -158,12 +169,13 @@ def main(cfg : DictConfig) -> None:
         else:
             training_ids = set(range(num_training_tasks)) - set(eval_idxs)
         (SAVE_PATH / f"fold_{k}").mkdir(exist_ok=True)
-        log += f'################## FOLD {k} ##################\n'
-        log += react_agent.create_rules(
+        newlog = f'################## FOLD {k} ##################\n'
+        newlog = react_agent.create_rules(
             list(training_ids),
             cache_fold=k,
             logging_dir=str(SAVE_PATH / f"fold_{k}"),
             run_name=cfg.run_name,
+            insights_pool_path=str(INSIGHTS_POOL_PATH),
             loaded_dict=dicts[-1] if resume and resume_starting_fold == starting_fold else None,
             loaded_log=critique_summary_log if resume and resume_starting_fold == starting_fold else None,
             eval_idx_list=eval_idx_list,
@@ -177,7 +189,7 @@ def main(cfg : DictConfig) -> None:
     dicts.append(save_dict)
     save_trajectories_log(
         path=SAVE_PATH, 
-        log=log, 
+        log=newlog, 
         dicts=dicts,
         run_name=f'{cfg.run_name}',
         save_true_log=False

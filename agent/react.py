@@ -13,7 +13,7 @@ from prompts.templates.human import (
     human_instruction_fewshot_message_prompt,
     human_task_message_prompt,
 )
-from utils import print_message, token_counter, trace_prompt_history
+from utils import print_message, token_counter, trace_prompt_history, trace_code2math_block, parse_action, prompt_manual_finish_review
 class ReactAgent(BaseAgent):
     """
     A Generic ReAct Agent.
@@ -35,10 +35,14 @@ class ReactAgent(BaseAgent):
                  testing: bool = False,
                  task_idx: int = 0,
                  benchmark_name = None,
+                 verbose_trace: bool = False,
+                 manual_finish_review: bool = False,
                  *args,
                  **kwargs,
                  ) -> None:
         self.benchmark_name = benchmark_name
+        self.verbose_trace = verbose_trace
+        self.manual_finish_review = manual_finish_review
         self.name = name
         self.tasks = tasks
         self.task_idx = task_idx
@@ -58,7 +62,11 @@ class ReactAgent(BaseAgent):
         if not hasattr(self, 'format_reflections'):
             self.format_reflections = lambda reflections, include_prefix=False: ''
 
-        self.env = env(**self.tasks[self.task_idx]['env_kwargs'], max_steps=self.max_steps)
+        self.env = env(
+            **self.tasks[self.task_idx]['env_kwargs'],
+            max_steps=self.max_steps,
+            verbose_trace=self.verbose_trace,
+        )
         self.env.reset()
         self.task = self.tasks[self.task_idx]['task']
         self.reset()
@@ -72,10 +80,8 @@ class ReactAgent(BaseAgent):
         del openai_api_key
         self.token_counter = partial(token_counter, llm=llm, tokenizer=getattr(self.llm, 'tokenizer', None))
 
-        # build base prompt
-        self._build_agent_prompt()
+        # reset() 已在上方调用 _build_agent_prompt()，此处仅做动态 few-shot 更新（eval 模式）
         self.update_dynamic_prompt_components()
-        trace_prompt_history(self.prompt_history, "ReactAgent.__init__: after _build_agent_prompt + update_dynamic", getattr(self, "benchmark_name", None))
 
         self.long_pass = None
 
@@ -83,7 +89,7 @@ class ReactAgent(BaseAgent):
         return self.env.success_fn()
 
     def set_env(self, task_kwargs: Dict[str, Any], max_steps: int):
-        self.env.__init__(**task_kwargs, max_steps=max_steps)
+        self.env.__init__(**task_kwargs, max_steps=max_steps, verbose_trace=self.verbose_trace)
 
     def run(self, reset: bool = True, *args, **kwargs) -> None:
         if reset:
@@ -94,11 +100,20 @@ class ReactAgent(BaseAgent):
             self.step()
 
     def step(self) -> None:
-        message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, False)
+        if self.verbose_trace and getattr(self, 'benchmark_name', None) == 'code2math_code':
+            trace_code2math_block(
+                f"TASK {self.task_idx} | step {self.curr_step} | LLM call",
+                f"Problem:\n{self.remove_task_suffix(self.task)}",
+            )
+        message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, True)
         self.prompt_history.append(message)
-        # trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after append(ai message)", getattr(self, "benchmark_name", None))
         if getattr(self, 'benchmark_name', None) == 'code2math_code':
             self._print_code2math_ai_message(message)
+            if self.verbose_trace:
+                trace_code2math_block(
+                    f"TASK {self.task_idx} | step {self.curr_step} | LLM response",
+                    message.get('content', ''),
+                )
         else:
             self.print_message(message)
 
@@ -113,7 +128,7 @@ class ReactAgent(BaseAgent):
                 thought_num = 1
                 while message_type == 'thought' and thought_num < 2:
                     thought_num += 1
-                    message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, False)
+                    message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, True)
                     self.prompt_history.append(message)
                     self.print_message(message)
                 
@@ -127,7 +142,6 @@ class ReactAgent(BaseAgent):
                 thought_num += 1
                 message, message_type, others = self.llm_parser(self.prompt_agent(), self.curr_step, False)
                 self.prompt_history.append(message)
-                # trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after append(thought)", getattr(self, "benchmark_name", None))
                 self.print_message(message)
 
                 if thought_num > 2:
@@ -137,6 +151,7 @@ class ReactAgent(BaseAgent):
 
         # Observe
         observation, self.reward, self.terminated, self.truncated, _ = self.env.step(others['action'])
+        observation = self._apply_manual_finish_review(others['action'], observation)
         if others['action'] == 'N/A' and thought_num > 2:
             observation = "You are thinking too many times without taking action."
         observation_history, operation = self.observation_formatter(observation, step=self.curr_step)
@@ -148,13 +163,11 @@ class ReactAgent(BaseAgent):
                     message['content'] = message['content'].replace(self._last_observation_history['content'], observation_history['content'])
                     break
             self._last_observation_history = deepcopy(observation_history)
-        # trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after observation", getattr(self, "benchmark_name", None))
         self.print_message(observation_history)
 
         self.after_step()
 
         self.prompt_history = self.collapse_prompts(self.prompt_history)
-        # trace_prompt_history(self.prompt_history, f"ReactAgent.step(step={self.curr_step}): after collapse_prompts", getattr(self, "benchmark_name", None))
 
         self.curr_step += 1
 
@@ -162,14 +175,42 @@ class ReactAgent(BaseAgent):
         """Override BaseAgent.after_step; no-op for base ReactAgent."""
         pass
 
+    def _apply_manual_finish_review(self, action: str, observation: str) -> str:
+        """When enabled, ask human to verify Finish answers that failed automatic EM check."""
+        if not self.manual_finish_review:
+            return observation
+        if getattr(self, 'benchmark_name', None) not in ('math2code_math', 'physics2code_physics', 'chemistry2code_chemistry'):
+            return observation
+
+        action_type, _ = parse_action(action)
+        if action_type != 'Finish' or self.reward:
+            return observation
+
+        key = getattr(self.env, 'key', None)
+        if key is None:
+            return observation
+
+        human_correct = prompt_manual_finish_review(
+            correct_answer=key,
+            submitted_answer=getattr(self.env, 'answer', ''),
+            question=getattr(self.env, 'question', ''),
+            task_idx=self.task_idx,
+        )
+        self.env.manual_verified_correct = human_correct
+        self.reward = human_correct
+        self.env.reward = human_correct
+        if human_correct:
+            return "Answer is CORRECT"
+        return "Answer is INCORRECT"
+
     def prompt_agent(self) -> str:
-        # 这里已经错误成math了
         self.prompt_history = self.collapse_prompts(self.prompt_history)
         self.update_dynamic_prompt_components()
         prompt_history = self.collapse_prompts(self.prompt_history)
-        # trace_prompt_history(prompt_history, f"ReactAgent.prompt_agent(step={self.curr_step}): before LLM call", getattr(self, "benchmark_name", None))
-        # 在 math2code 等代码生成基准下，将当前构造好的完整 prompt 打印到控制台，便于调试
-        if getattr(self, "benchmark_name", None) in ["math2code", "math2code_math"]:
+        # 在代码生成基准下，将当前构造好的完整 prompt 打印到控制台，便于调试
+        if self.verbose_trace and getattr(self, "benchmark_name", None) in [
+            "math2code", "math2code_math", "physics2code_physics", "chemistry2code_chemistry", "code2math_code",
+        ]:
             print("\n================ LLM PROMPT (step {}) ================".format(self.curr_step))
             for msg in prompt_history:
                 role = msg.get("role", "unknown")
@@ -278,17 +319,14 @@ class ReactAgent(BaseAgent):
         self.insert_after_task_prompt()
         self.prompt_history = self.collapse_prompts(self.prompt_history)
         self.pretask_idx = len(self.prompt_history)
-        # trace_prompt_history(self.prompt_history, "ReactAgent._build_agent_prompt: end", getattr(self, "benchmark_name", None))
         # print("更新后的self.prompt_history:", self.prompt_history)
         return self.prompt_history
 
     def reset(self, *args, **kwargs) -> None:
         self.prompt_history = []
-        # trace_prompt_history(self.prompt_history, "ReactAgent.reset: after clear", getattr(self, "benchmark_name", None))
         self.update_dynamic_prompt_components(reset=True)
         self.curr_step = 1
         self._build_agent_prompt()
-        # trace_prompt_history(self.prompt_history, "ReactAgent.reset: after _build_agent_prompt", getattr(self, "benchmark_name", None))
 
     def insert_before_task_prompt(self) -> None:
         return

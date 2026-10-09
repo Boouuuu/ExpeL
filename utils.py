@@ -2,7 +2,6 @@ import random
 import string
 from typing import List, Dict, Callable, Tuple, Any, Union
 from matplotlib import pyplot as plt
-
 import tiktoken
 from langchain.schema import (
     ChatMessage
@@ -113,10 +112,53 @@ def token_counter(text: str, llm: str = 'gpt-3.5-turbo', tokenizer: Callable = N
         llm: The language model name.
         tokenizer: The tokenizer to be used.
     """
-    if 'gpt' in llm:
-        return len(tiktoken.encoding_for_model(llm).encode(text))
+    if not text:
+        return 0
+    if tokenizer is not None:
+        encoded = tokenizer.encode(text)
+        return len(encoded) if hasattr(encoded, '__len__') else encoded
 
-    raise NotImplementedError
+    llm_lower = llm.lower()
+    if 'gpt' in llm_lower:
+        try:
+            return len(tiktoken.encoding_for_model(llm).encode(text))
+        except KeyError:
+            return len(tiktoken.get_encoding('cl100k_base').encode(text))
+
+    # GLM / Qwen / other models: approximate with cl100k_base for truncation checks
+    return len(tiktoken.get_encoding('cl100k_base').encode(text))
+
+
+def prompt_manual_finish_review(
+    correct_answer: str,
+    submitted_answer: str,
+    question: str = "",
+    task_idx: int = None,
+) -> bool:
+    """Print Finish vs ground-truth and wait for human judgment. Returns True if correct."""
+    header = f"[Manual Finish Review] TASK {task_idx}" if task_idx is not None else "[Manual Finish Review]"
+    print(f"\n{'=' * 60}", flush=True)
+    print(header, flush=True)
+    print("自动判定：错误（EM 不匹配）", flush=True)
+    if question:
+        print(f"题目     : {question}", flush=True)
+    print(f"标准答案 : {correct_answer}", flush=True)
+    print(f"Finish答案: {submitted_answer}", flush=True)
+    print(f"{'=' * 60}", flush=True)
+
+    _ACCEPT_CORRECT = {'y', 'yes', 'c', 'correct', 'true', '1', '是', '对', '正确'}
+    _ACCEPT_INCORRECT = {'n', 'no', 'w', 'wrong', 'false', '0', '否', '错', '错误'}
+
+    while True:
+        choice = input("请人工判定 Finish 答案是否正确？(y=正确 / n=错误): ").strip().lower()
+        if choice in _ACCEPT_CORRECT:
+            print("[Manual Finish Review] 人工判定：正确\n", flush=True)
+            return True
+        if choice in _ACCEPT_INCORRECT:
+            print("[Manual Finish Review] 人工判定：错误\n", flush=True)
+            return False
+        print("无效输入，请输入 y（正确）或 n（错误）。", flush=True)
+
 
 def print_message(message: Union[dict, ChatMessage], token_counter: Callable = None, testing: bool = True, extra_text: str = '') -> None:
     """
@@ -147,17 +189,32 @@ def print_message(message: Union[dict, ChatMessage], token_counter: Callable = N
         print(message_content)
 
 
+def trace_code2math_block(
+    title: str,
+    content: str,
+    *,
+    max_len: int = 4000,
+) -> None:
+    """在 verbose_trace 模式下打印 code2math_code 流程块。"""
+    body = (content or "").strip()
+    if len(body) > max_len:
+        body = body[:max_len] + f"\n... [truncated, total {len(content)} chars]"
+    print(f"\n{'=' * 20} [TRACE] {title} {'=' * 20}")
+    print(body)
+    print("=" * (44 + len(title)))
+
+
 def trace_prompt_history(
     prompt_history: List[dict],
     label: str,
     benchmark_name: str = None,
-    max_preview: int = 120,
+    max_preview: int = 120000,
 ) -> None:
     """
     当 benchmark 为 math2code / math2code_math 时，将 prompt_history 的变化打印到控制台，
     用于跟踪 eval 运行时 self.prompt_history 的演变。
     """
-    if benchmark_name not in ('math2code_math', 'code2math_code'):
+    if benchmark_name not in ('math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code'):
         return
     print(f"\n>>> [prompt_history] {label}")
     print(f"    len(prompt_history) = {len(prompt_history)}")
@@ -195,78 +252,10 @@ def trace_prompt_history(
     
 #     else:
 #         return None, None
-import re
-
-def parse_action2(string: str):
-    """
-    从包含 1 个或多个 action（包括 Reason[]、Implement[]、Finish[]等）的文本中,
-    提取最后一个 action 的类型和内容。匹配失败（无有效 action）时返回 (None, None)。
-    
-    特性:
-    - 适配单行/多行 action 内容（支持代码块、换行符、特殊字符）
-    - 适配文本中只有 1 个 action 或多个 action 的场景
-    - 支持括号嵌套（如 Calculate[13 + 9 - 20 + 3]）
-    - 自动清理提取内容的首尾空白
-    
-    Args:
-        string: 待解析的完整文本（可包含任意前缀/后缀文本 + 1个/多个 action）
-    
-    Returns:
-        last_action_type: 最后一个 action 的类型（如 Finish/Implement），无则返回 None
-        last_action_content: 最后一个 action 的内容（去掉外层 []），无则返回 None
-    """
-    
-    # 匹配 action 类型（字母开头的单词）后跟方括号
-    # 使用递归或栈来处理嵌套括号
-    
-    # 首先找到所有可能的 action 起始位置
-    action_pattern = r'([A-Z][a-zA-Z]*)\['
-    
-    matches = []
-    
-    for match in re.finditer(action_pattern, string):
-        action_type = match.group(1)
-        start_pos = match.end()  # '[' 之后的位置
-        
-        # 使用栈来匹配嵌套括号
-        bracket_count = 1
-        pos = start_pos
-        
-        while pos < len(string) and bracket_count > 0:
-            if string[pos] == '[':
-                bracket_count += 1
-            elif string[pos] == ']':
-                bracket_count -= 1
-            pos += 1
-        
-        # 如果括号匹配成功
-        if bracket_count == 0:
-            content = string[start_pos:pos-1]  # 提取括号内的内容（不含最后的']'）
-            matches.append((action_type, content))
-    
-    # 无匹配结果时返回 (None, None)
-    if not matches:
-        return None, None
-    
-    # 取最后一个匹配项，清理首尾空白后返回
-    last_type, last_content = matches[-1]
-    return last_type.strip(), last_content.strip()
-
-
-# 测试
-test_str = """
-Action 1: Thought 1: We can approach this problem using the principle of inclusion-exclusion to find the number of boxes containing both pens and pencils by considering the number of boxes containing pencils, pens, neither, and the total number of boxes. Let's calculate the number of boxes containing both pens and pencils using the formula: \( B_{\text{both}} = P + N - B + B_{\text{neither}} \), where \( P = 13 \) (boxes containing pencils), \( N = 9 \) (boxes containing pens), \( B = 20 \) (total number of boxes), and \( B_{\text{neither}} = 3 \) (boxes containing neither).
-Calculate[13 + 9 - 20 + 3]Observation 1: Result: 5
-Finish[5]
-"""
-
-result = parse_action2(test_str)
-# print(result)  # 应该输出: ('Finish', '5')
-import re
 
 def parse_action(text: str):
     """
-    专门解析 LLM 输出中的 Action（仅支持 Test / Finish）
+    专门解析 LLM 输出中的 Action（仅支持 Search / Test / Finish）
 
     支持：
     - 多行代码
@@ -277,7 +266,7 @@ def parse_action(text: str):
         (action_type, content) 或 (None, None)
     """
 
-    ACTION_TYPES = ("Test", "Finish")
+    ACTION_TYPES = ("Search", "Test", "Finish")
     matches = []
 
     i = 0
@@ -314,66 +303,544 @@ def parse_action(text: str):
 
     return matches[-1]
 
-test_str = """
-Action 1: Thought 1: ... Test[from typing import List
-def has_close_elements(numbers: List[float], threshold: float) -> bool:
-    n = len(numbers)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if abs(numbers[i] - numbers[j]) < threshold:
-                return True
-    return False
-assert has_close_elements([1.0, 2.0, 3.0], 0.5) == False
-assert has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) == True
-assert has_close_elements([], 0.5) == False
-assert has_close_elements([1.0], 0.5) == False
-]
 """
-action_type, content = parse_action(test_str)
+math_em.py - 数学答案等价性判断
+整合了两个版本的能力：
+  - 原版：Fraction 精确有理数解析（快速路径）
+  - 参考版：_strip_string 规范化 + sympy 符号等价 + 列表顺序无关比较
 
-# print(action_type)
-# print(content)
+判断层次（is_equiv）：
+  1. 预处理：text{...} 提取、千位分隔符移除
+  2. _strip_string 规范化后字符串完全相等
+  3. 列表/集合顺序无关比较
+  4. sympy 符号/数值等价（有理化、负指数、根式等）
+  5. normalize_answer 兜底（冠词、标点等非数学文本）
+  6. 原始字符串相等
 
-def normalize_answer(s: str):
+EM() 是对外的主接口，保持与原版签名兼容。
+"""
+
+import re
+import string as _string
+from fractions import Fraction
+
+# ──────────────────────────────────────────────────────────────
+# 第一层：字符串规范化辅助函数（来自参考文件，修复 SyntaxWarning）
+# ──────────────────────────────────────────────────────────────
+
+def _fix_fracs(string):
+    """将 \frac12 / \frac1b 等无括号写法规范化为 \frac{1}{2}。"""
+    substrs = string.split("\\frac")
+    new_str = substrs[0]
+    if len(substrs) > 1:
+        substrs = substrs[1:]
+        for substr in substrs:
+            new_str += "\\frac"
+            if substr[0] == "{":
+                new_str += substr
+            else:
+                try:
+                    assert len(substr) >= 2
+                except Exception:
+                    return string
+                a = substr[0]
+                b = substr[1]
+                if b != "{":
+                    if len(substr) > 2:
+                        post_substr = substr[2:]
+                        new_str += "{" + a + "}{" + b + "}" + post_substr
+                    else:
+                        new_str += "{" + a + "}{" + b + "}"
+                else:
+                    if len(substr) > 2:
+                        post_substr = substr[2:]
+                        new_str += "{" + a + "}" + b + post_substr
+                    else:
+                        new_str += "{" + a + "}" + b
+    return new_str
+
+
+def _fix_a_slash_b(string):
+    """将 {a}/{b} 格式规范化为 \frac{a}{b}。"""
+    if len(string.split("/")) != 2:
+        return string
+    a_str, b_str = string.split("/")
+    try:
+        a = int(a_str)
+        b = int(b_str)
+        assert string == "{}/{}".format(a, b)
+        return "\\frac{" + str(a) + "}{" + str(b) + "}"
+    except Exception:
+        return string
+
+
+def _remove_right_units(string):
+    """移除 \text{ unit} 形式的单位后缀。"""
+    if "\\text{ " in string:
+        splits = string.split("\\text{ ")
+        assert len(splits) == 2
+        return splits[0]
+    return string
+
+
+def _fix_sqrt(string):
+    """将 sqrt2 规范化为 sqrt{2}（不带花括号时补齐）。"""
+    if "\\sqrt" not in string:
+        return string
+    splits = string.split("\\sqrt")
+    new_string = splits[0]
+    for split in splits[1:]:
+        if split[0] != "{":
+            a = split[0]
+            new_substr = "\\sqrt{" + a + "}" + split[1:]
+        else:
+            new_substr = "\\sqrt" + split
+        new_string += new_substr
+    return new_string
+
+
+def _extract_text_content(string):
+    r"""
+    将 \text{...} 替换为其内容，并去掉外层括号。
+    例如：\text{Tuesday} -> Tuesday，\text{(B)} -> B
     """
-    Lower text and remove punctuation, articles and extra whitespace.
-    
-    Args:
-        s: string to normalize
+    def replacer(m):
+        inner = m.group(1).strip()
+        inner = re.sub(r'^\(([^)]*)\)$', r'\1', inner)
+        return inner
+    return re.sub(r'\\text\{([^}]*)\}', replacer, string)
 
-    Returns:
-        normalized string
+
+def _remove_numeric_separators(string):
+    r"""
+    移除 LaTeX 数字分隔符 \! 并处理千位逗号。
+    例如：85,\!184 -> 85184，1,000,000 -> 1000000
+    """
+    string = string.replace("\\!", "")
+    if re.match(r'^-?\d{1,3}(,\d{3})+$', string):
+        string = string.replace(",", "")
+    return string
+
+
+def _strip_string(string):
+    """
+    将数学表达式字符串规范化为统一形式，便于后续比较。
+    处理范围：换行、\\!、dfrac/tfrac、left/right、
+              角度符号、$、单位、百分号、前导小数点、
+              k= 前缀、sqrt、空格、frac 写法、0.5 特化
+    """
+    string = string.replace("\n", "")
+    string = string.replace("\\!", "")
+    string = string.replace("\\\\", "\\")
+
+    # dfrac / tfrac / cfrac → frac
+    string = string.replace("tfrac", "frac")
+    string = string.replace("dfrac", "frac")
+    string = string.replace("cfrac", "frac")
+
+    string = string.replace("\\left", "")
+    string = string.replace("\\right", "")
+
+    # 角度
+    string = string.replace("^{\\circ}", "")
+    string = string.replace("^\\circ", "")
+
+    # 美元符号：转义的 \$ 和裸的 $（$...$、$$...$$）
+    string = string.replace("\\$", "")
+    string = string.strip("$")
+
+    string = _remove_right_units(string)
+
+    # 百分号
+    string = string.replace("\\%", "")
+    string = string.replace(r"\%", "")
+
+    # 前导小数点修复
+    string = string.replace(" .", " 0.")
+    string = string.replace("{.", "{0.")
+    if len(string) == 0:
+        return string
+    if string[0] == ".":
+        string = "0" + string
+
+    # 去掉 "k = " 前缀（如 "x = 3" → "3"）
+    if len(string.split("=")) == 2:
+        if len(string.split("=")[0]) <= 2:
+            string = string.split("=")[1]
+
+    string = _fix_sqrt(string)
+    string = string.replace(" ", "")
+    string = _fix_fracs(string)
+
+    # 0.5 → \frac{1}{2}（特化以覆盖更多等价场景）
+    if string == "0.5":
+        string = "\\frac{1}{2}"
+
+    string = _fix_a_slash_b(string)
+    return string
+
+
+# ──────────────────────────────────────────────────────────────
+# 第二层：sympy 符号/数值等价
+# ──────────────────────────────────────────────────────────────
+
+def _latex_to_sympy(s):
+    """
+    将规范化后的 LaTeX 字符串递归解析为 sympy 表达式。
+    支持：frac{a}{b}  sqrt{a}  sqrt[n]{a}  ^{n}  + - *
+          隐式系数（如 3*sqrt(7)）、负号、整数/浮点数、单字母变量。
+    """
+    import sympy as sp
+
+    def _matching_brace(s, start):
+        depth = 0
+        for i in range(start, len(s)):
+            if s[i] == '{':
+                depth += 1
+            elif s[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return i
+        raise ValueError(f"unmatched brace in: {s}")
+
+    def _matching_paren(s, start):
+        depth = 0
+        for i in range(start, len(s)):
+            if s[i] == '(':
+                depth += 1
+            elif s[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    return i
+        raise ValueError(f"unmatched paren in: {s}")
+
+    def _find_top_level_char(s, ch):
+        depth = 0
+        for i in range(len(s) - 1, -1, -1):
+            c = s[i]
+            if c in '})':
+                depth += 1
+            elif c in '{(':
+                depth -= 1
+            elif c == ch and depth == 0:
+                return i
+        return -1
+
+    def _split_top_level(s, delimiters):
+        parts, depth, current, current_sign = [], 0, [], '+'
+        i = 0
+        while i < len(s):
+            c = s[i]
+            if c in '{(':
+                depth += 1
+            elif c in '})':
+                depth -= 1
+            elif depth == 0 and c in delimiters and i > 0:
+                parts.append((current_sign, ''.join(current).strip()))
+                current, current_sign = [], c
+                i += 1
+                continue
+            current.append(c)
+            i += 1
+        if current:
+            parts.append((current_sign, ''.join(current).strip()))
+        return parts
+
+    def _split_top_level_mul(s):
+        parts, depth, current = [], 0, []
+        for c in s:
+            if c in '{(':
+                depth += 1
+            elif c in '})':
+                depth -= 1
+            elif c == '*' and depth == 0:
+                parts.append(''.join(current).strip())
+                current = []
+                continue
+            current.append(c)
+        if current:
+            parts.append(''.join(current).strip())
+        return parts
+
+    def parse_expr(s):
+        s = s.strip()
+        while s.startswith("(") and s.endswith(")") and _matching_paren(s, 0) == len(s) - 1:
+            s = s[1:-1].strip()
+        while s.startswith("{") and s.endswith("}") and _matching_brace(s, 0) == len(s) - 1:
+            s = s[1:-1].strip()
+        terms = _split_top_level(s, ('+', '-'))
+        if len(terms) > 1:
+            result = None
+            for sign, term in terms:
+                val = parse_mul(term)
+                result = val if result is None else (result + val if sign == '+' else result - val)
+            return result
+        return parse_mul(s)
+
+    def parse_mul(s):
+        s = s.strip()
+        factors = _split_top_level_mul(s)
+        if len(factors) > 1:
+            result = sp.Integer(1)
+            for f in factors:
+                result = result * parse_pow(f)
+            return result
+        return parse_pow(s)
+
+    def parse_pow(s):
+        s = s.strip()
+        idx = _find_top_level_char(s, '^')
+        if idx != -1:
+            base = parse_atom(s[:idx])
+            exp_str = s[idx + 1:].strip()
+            if exp_str.startswith("{"):
+                close = _matching_brace(exp_str, 0)
+                exp = parse_expr(exp_str[1:close])
+                tail = exp_str[close + 1:]
+            else:
+                exp = parse_atom(exp_str[0])
+                tail = exp_str[1:]
+            result = base ** exp
+            if tail:
+                result = result * parse_atom(tail)
+            return result
+        return parse_atom(s)
+
+    def parse_atom(s):
+        s = s.strip()
+        if not s:
+            return sp.Integer(0)
+
+        # \frac{a}{b}
+        if s.startswith("\\frac"):
+            rest = s[5:].strip()
+            if rest.startswith("{"):
+                c1 = _matching_brace(rest, 0)
+                num = parse_expr(rest[1:c1])
+                rest2 = rest[c1 + 1:].strip()
+                if rest2.startswith("{"):
+                    c2 = _matching_brace(rest2, 0)
+                    den = parse_expr(rest2[1:c2])
+                    tail = rest2[c2 + 1:]
+                    result = num / den
+                    return result * parse_expr(tail) if tail.strip() else result
+            raise ValueError(f"bad frac: {s}")
+
+        # \sqrt[n]{a} 或 \sqrt{a}
+        if s.startswith("\\sqrt"):
+            rest = s[5:].strip()
+            n = 2
+            if rest.startswith("["):
+                close_bracket = rest.index("]")
+                n = int(rest[1:close_bracket])
+                rest = rest[close_bracket + 1:].strip()
+            if rest.startswith("{"):
+                c = _matching_brace(rest, 0)
+                inner = parse_expr(rest[1:c])
+                tail = rest[c + 1:]
+                result = inner ** sp.Rational(1, n)
+                return result * parse_expr(tail) if tail.strip() else result
+            raise ValueError(f"bad sqrt: {s}")
+
+        # 负号
+        if s.startswith("-"):
+            return -parse_atom(s[1:])
+
+        # 整数
+        try:
+            return sp.Integer(int(s))
+        except ValueError:
+            pass
+
+        # 浮点数
+        try:
+            return sp.Float(float(s))
+        except ValueError:
+            pass
+
+        # 单字母变量
+        if re.match(r'^[a-zA-Z]$', s):
+            return sp.Symbol(s)
+
+        # 隐式乘法：数字前缀 + 后续原子，如 3\sqrt{7}
+        m = re.match(r'^(-?\d+(?:\.\d+)?)(\\?.+)$', s)
+        if m:
+            return parse_atom(m.group(1)) * parse_atom(m.group(2))
+
+        # 去括号重试
+        if s.startswith("(") and s.endswith(")"):
+            return parse_expr(s[1:-1])
+        if s.startswith("{") and s.endswith("}"):
+            return parse_expr(s[1:-1])
+
+        raise ValueError(f"cannot parse atom: '{s}'")
+
+    return parse_expr(s)
+
+
+def _try_sympy_equiv(s1, s2):
+    """
+    用 sympy 判断两个规范化后的 LaTeX 字符串是否等价。
+    返回 True/False/None（None 表示无法解析，跳过此层）。
+    """
+    try:
+        import sympy as sp
+        expr1 = _latex_to_sympy(s1)
+        expr2 = _latex_to_sympy(s2)
+        diff = sp.simplify(expr1 - expr2)
+        if diff == 0:
+            return True
+        # 数值近似兜底（处理 sympy.simplify 无法化简的情况）
+        try:
+            val = complex(sp.N(diff, 20))
+            if abs(val) < 1e-9:
+                return True
+        except Exception:
+            pass
+        return False
+    except Exception:
+        return None
+
+
+# ──────────────────────────────────────────────────────────────
+# 第三层：列表 / 集合顺序无关比较
+# ──────────────────────────────────────────────────────────────
+
+def _split_list(string):
+    """按顶层逗号分割数学列表（不切入花括号/括号内）。"""
+    result, depth, current = [], 0, []
+    for ch in string:
+        if ch in "{(":
+            depth += 1
+            current.append(ch)
+        elif ch in "})":
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            result.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        result.append("".join(current).strip())
+    return result
+
+
+def _is_list_string(string):
+    return len(_split_list(string)) > 1
+
+
+def _list_equiv(s1, s2):
+    """把两个字符串当作集合（顺序无关）比较，元素递归用 is_equiv 判断。"""
+    parts1 = _split_list(s1)
+    parts2 = _split_list(s2)
+    if len(parts1) != len(parts2):
+        return False
+    used = [False] * len(parts2)
+    for p1 in parts1:
+        matched = False
+        for i, p2 in enumerate(parts2):
+            if not used[i] and is_equiv(p1, p2):
+                used[i] = True
+                matched = True
+                break
+        if not matched:
+            return False
+    return True
+
+
+# ──────────────────────────────────────────────────────────────
+# 原版兼容层：normalize_answer（保留，供外部代码使用）
+# ──────────────────────────────────────────────────────────────
+
+def normalize_answer(s: str) -> str:
+    """
+    原版字符串规范化（小写、去标点、去冠词、去多余空白）。
+    作为最后兜底层使用。
     """
     def remove_articles(text):
         return re.sub(r"\b(a|an|the)\b", " ", text)
-    
+
     def white_space_fix(text):
         return " ".join(text.split())
 
     def remove_punc(text):
-        exclude = set(string.punctuation)
+        exclude = set(_string.punctuation)
         return "".join(ch for ch in text if ch not in exclude)
 
-    def lower(text):
-        return text.lower()
+    return white_space_fix(remove_articles(remove_punc(s.lower())))
 
-    return white_space_fix(remove_articles(remove_punc(lower(s))))
 
-def EM(answer, key) -> bool:
+# ──────────────────────────────────────────────────────────────
+# 主接口
+# ──────────────────────────────────────────────────────────────
+
+def is_equiv(str1, str2, verbose=False) -> bool:
     """
-    Exact match between answer and key.
+    判断两个数学答案字符串是否等价。
 
-    Args:
-        answer: answer
-        key: key
-    
-    Returns:
-        True if exact match, else False
+    层次：
+      1. 预处理（\\text 提取、\\! 千位分隔符）
+      2. _strip_string 规范化后字符串完全相等
+      3. 列表/集合顺序无关比较
+      4. sympy 符号/数值等价
+      5. 兜底：原始字符串相等
     """
-    return normalize_answer(answer) == normalize_answer(key)
+    if str1 is None and str2 is None:
+        return True
+    if str1 is None or str2 is None:
+        return False
+
+    try:
+        def preprocess(s):
+            s = _extract_text_content(s)
+            s = _remove_numeric_separators(s)
+            return s
+
+        str1 = preprocess(str1)
+        str2 = preprocess(str2)
+
+        ss1 = _strip_string(str1)
+        ss2 = _strip_string(str2)
+
+        if verbose:
+            print(f"  stripped: '{ss1}'  vs  '{ss2}'")
+
+        # 1. 规范化后字符串完全相等
+        if ss1 == ss2:
+            return True
+
+        # 2. 列表/集合顺序无关比较
+        if _is_list_string(ss1) or _is_list_string(ss2):
+            if _list_equiv(ss1, ss2):
+                return True
+
+        # 3. sympy 符号/数值等价
+        sympy_result = _try_sympy_equiv(ss1, ss2)
+        if sympy_result is True:
+            return True
+        if sympy_result is False:
+            return False
+
+        # 4. normalize_answer 兜底（冠词、标点差异等非数学文本场景）
+        if normalize_answer(str1) == normalize_answer(str2):
+            return True
+
+        # 5. 最终兜底：原始字符串相等
+        return str1 == str2
+
+    except Exception:
+        return str1 == str2
 
 
-def save_trajectories_log(path: str, log: str = None, dicts: list = None, true_log: str = None, save_log: bool = True, save_dict: bool = True, save_true_log: bool = True, run_name: str = 'run') -> None:
+def EM(answer: str, key: str) -> bool:
+    """
+    对外主接口，保持与原版签名兼容。
+    直接委托给 is_equiv。
+    """
+    return is_equiv(answer, key)
+
+def save_trajectories_log(path: str, log: str = None, dicts: list = None, true_log: str = None, save_log: bool = True, save_dict: bool = True, save_true_log: bool = True, run_name: str = 'run', log_mode: str = 'a') -> None:
     """
     Saves the log and the dict to the path.
     
@@ -388,13 +855,13 @@ def save_trajectories_log(path: str, log: str = None, dicts: list = None, true_l
         run_name: The name of the run.
     """
     if save_log:
-        with open(f'{path}/{run_name}.txt', 'w', encoding='utf-8') as f:
+        with open(f'{path}\\{run_name}.txt', log_mode, encoding='utf-8') as f:
             f.write(log)
     if save_dict:
-        with open(f'{path}/{run_name}.pkl', 'wb') as f:
+        with open(f'{path}\\{run_name}.pkl', 'wb') as f:
             pickle.dump(dicts, f)
     if save_true_log:
-        with open(f'{path}/{run_name}_true.txt', 'w', encoding='utf-8') as f:
+        with open(f'{path}\\{run_name}_true.txt', 'w', encoding='utf-8') as f:
             f.write(true_log)
 
 def load_trajectories_log(path: str, load_log: bool = True, load_dict: bool = True, load_true_log: bool = False, run_name: str = 'run') -> Dict[str, Any]:
@@ -413,16 +880,101 @@ def load_trajectories_log(path: str, load_log: bool = True, load_dict: bool = Tr
     """
     out = dict()
     if load_log:
-        with open(f'{path}/{run_name}.txt', 'r', encoding='utf-8') as f:
+        with open(f'{path}\\{run_name}.txt', 'r', encoding='utf-8') as f:
             out['log'] = f.read()
     if load_dict:
-        with open(f'{path}/{run_name}.pkl', 'rb') as f:
-            out['dicts'] = pickle.load(f)
+        try:
+            with open(f'{path}\\{run_name}.pkl', 'rb') as f:
+                out['dicts'] = pickle.load(f)
+        except (EOFError, pickle.UnpicklingError, FileNotFoundError) as e:
+            print(f'Warning: Corrupted or missing pickle file. Starting with empty data. Error: {e}')
+            out['dicts'] = []
     if load_true_log:
-        with open(f'{path}/{run_name}_true.txt', 'r', encoding='utf-8') as f:
+        with open(f'{path}\\{run_name}_true.txt', 'r', encoding='utf-8') as f:
             out['true_log'] = f.read()
         
     return out
+
+def parse_log(log_path: str):
+    with open(log_path, 'r', encoding='utf-8') as f:
+        text = f.read()
+
+    blocks = re.split(r'#######################################', text)
+    tasks = {}
+
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        # 提取任务编号和反思轮次
+        m = re.search(r'TASK (\d+) Reflection (\d+)', block)
+        if not m:
+            continue
+        task_id = int(m.group(1))
+        ref_round = int(m.group(2))
+
+        # ----- 修改开始：取最后一个 Question，并从其后找第一个 Thought/Action -----
+        # 找到所有 Question
+        q_matches = list(re.finditer(r'Question:\s*(.+?)(?=\nThought|\nAction|$)', block, re.DOTALL))
+        if q_matches:
+            last_q = q_matches[-1]
+            question = last_q.group(1).strip()
+            # 从最后一个 Question 结束位置开始截取剩余文本
+            remaining = block[last_q.end():]
+            lines_remaining = remaining.split('\n')
+            start_idx = None
+            for i, line in enumerate(lines_remaining):
+                if re.match(r'^(?i)thought(?:\s+\d+)?:', line) or re.match(r'^(?i)action(?:\s+\d+)?:', line):
+                    start_idx = i
+                    break
+            if start_idx is not None:
+                trajectory_text = '\n'.join(lines_remaining[start_idx:])
+            else:
+                trajectory_text = ''
+        else:
+            # 没有 Question，使用原逻辑（从块开头找第一个 Thought/Action）
+            question = None
+            lines = block.split('\n')
+            start_idx = None
+            for i, line in enumerate(lines):
+                if re.match(r'^(?i)thought(?:\s+\d+)?:', line) or re.match(r'^(?i)action(?:\s+\d+)?:', line):
+                    start_idx = i
+                    break
+            if start_idx is not None:
+                trajectory_text = '\n'.join(lines[start_idx:])
+            else:
+                trajectory_text = ''
+        # ----- 修改结束 -----
+
+        # 判断本轮结果（仍然基于整个 block）
+        if 'Answer is CORRECT' in block:
+            result = 'CORRECT'
+        elif 'Answer is INCORRECT' in block:
+            result = 'INCORRECT'
+        else:
+            result = None
+
+        # 存入 tasks
+        if task_id not in tasks:
+            tasks[task_id] = {'reflections': []}
+        tasks[task_id]['reflections'].append({
+            'round': ref_round,
+            'question': "Question: " + question,
+            'trajectory': trajectory_text,
+            'result': result,
+            # 如果需要 model_answer 可以再提取，但此处未使用
+        })
+
+    return tasks
+
+def get_last_completed_task_from_log(log_text: str) -> int:
+    '''从log文件中解析最后一个完成的任务编号。'''
+    pattern = r'TASK (\d+) Reflection 0'
+    matches = re.findall(pattern, log_text)
+    if not matches:
+        return -1
+    return int(matches[-1])
 
 
 def format_math2code_log(s: str) -> str:
@@ -480,7 +1032,7 @@ def recompute_stats(parsed_result: List[List[str]], benchmark: str, trial: int =
         last_trajectory = trajectories[min(trial, len(trajectories) - 1)].strip()
         last_step = last_trajectory.split('\n')[-1]
 
-        if benchmark in ['hotpotqa', 'math2code_math', 'code2math_code']:
+        if benchmark in ['hotpotqa', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code']:
             if ' CORRECT' in last_step or 'Answer is correct.' in last_step:
                 stats["success"] += 1
             elif 'INCORRECT' in last_step or 'Answer is incorrect.' in last_step:
@@ -556,6 +1108,70 @@ def plot_trial_stats(parsed_result: List[List[str]], benchmark: str, max_trials:
         plt.savefig(save_path)
     
     return results
+
+
+def print_and_plot_progress_stats(
+    success: int,
+    fail: int,
+    halted: int,
+    save_path: str,
+    run_name: str = "",
+    total_tasks: int = None,
+) -> None:
+    """Print cumulative success/fail/halted counts and save a progress chart locally."""
+    completed = success + fail + halted
+    if completed == 0:
+        return
+
+    total_str = f" / {total_tasks}" if total_tasks else ""
+    header = f"[Progress Report] {run_name} — {completed}{total_str} tasks completed"
+    summary = (
+        f"\n{'=' * 60}\n"
+        f"{header}\n"
+        f"  Success : {success:>4}  ({success / completed * 100:.1f}%)\n"
+        f"  Fail    : {fail:>4}  ({fail / completed * 100:.1f}%)\n"
+        f"  Halted  : {halted:>4}  ({halted / completed * 100:.1f}%)\n"
+        f"  Total   : {completed:>4}\n"
+        f"{'=' * 60}"
+    )
+    print(summary, flush=True)
+
+    labels = ['Success', 'Fail', 'Halted']
+    values = [success, fail, halted]
+    colors = ['#2ecc71', '#e74c3c', '#f39c12']
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    bars = axes[0].bar(labels, values, color=colors)
+    axes[0].set_title(f'Task Outcomes ({completed} completed)')
+    axes[0].set_ylabel('Count')
+    for bar, val in zip(bars, values):
+        if val > 0:
+            axes[0].text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                str(val),
+                ha='center',
+                va='bottom',
+            )
+
+    non_zero = [(label, val, color) for label, val, color in zip(labels, values, colors) if val > 0]
+    if non_zero:
+        axes[1].pie(
+            [item[1] for item in non_zero],
+            labels=[item[0] for item in non_zero],
+            colors=[item[2] for item in non_zero],
+            autopct='%1.1f%%',
+            startangle=90,
+        )
+    axes[1].set_title('Distribution')
+
+    fig.suptitle(header, fontsize=11)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"[Progress Report] Chart saved to: {save_path}", flush=True)
+
 
 def get_env_name_from_gamefile(gamefile: str) -> Union[str, None]:
     """
@@ -805,7 +1421,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             invalid = 'nothing happens'
         elif benchmark == 'webshop':
             invalid = 'invalid action' 
-        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code']:
             invalid = 'invalid action'
         mode += 'observation'
 
@@ -814,7 +1430,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             lambda_filter = lambda y: y.strip().startswith('Action: think[')
         elif benchmark == 'alfworld':
             lambda_filter = lambda y: y.strip().startswith('> think:')
-        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code']:
             lambda_filter = lambda y: y.strip().startswith('Thought')
         else:
             raise NotImplementedError(f'benchmark {benchmark} not implemented')
@@ -823,7 +1439,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             lambda_filter = lambda y: y.strip().startswith('Action: click[') or y.strip().startswith('Action: search[') # valid actions
         elif benchmark == 'alfworld':
             lambda_filter = lambda y: y.strip().startswith('> ') and not y.strip().startswith('> think:') # valid and invalid actions
-        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code']:
             lambda_filter = lambda y: y.strip().startswith('Action')
         else:
             raise NotImplementedError(f'benchmark {benchmark} not implemented')
@@ -832,7 +1448,7 @@ def mode_results(benchmark: str, log: str, num_tasks: int, mode: str) -> Any:
             lambda_filter = lambda y: y.strip().startswith('Observation:')
         elif benchmark == 'alfworld':
             lambda_filter = lambda y: not y.strip().startswith('> ')
-        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'code2math_code']:
+        elif benchmark in ['hotpotqa', 'fever', 'math2code_math', 'physics2code_physics', 'chemistry2code_chemistry', 'code2math_code']:
             lambda_filter = lambda y: y.strip().startswith('Observation')
         else:
             raise NotImplementedError(f'benchmark {benchmark} not implemented')
